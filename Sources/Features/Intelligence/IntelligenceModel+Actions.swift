@@ -43,7 +43,7 @@ extension IntelligenceModel {
                     let operations = try await self.operations(for: input)
                     try Task.checkCancellation()
                     candidates += try operations.flatMap {
-                        try $0.changes(in: request.snapshot, pass: input, scope: chunk)
+                        try $0.changes(in: request.document, pass: input, scope: chunk)
                     }
                 } else {
                     let suggestions = try await self.suggestions(for: input)
@@ -61,10 +61,10 @@ extension IntelligenceModel {
             }
         }
         let proposal = Proposal(
-            snapshot: request.snapshot, scopedCandidates: candidates,
+            document: request.document, scopedCandidates: candidates,
             safetyInstruction: request.instruction)
         if proposal.canApply {
-            _ = try proposal.application(to: request.snapshot)
+            _ = try proposal.application()
         }
         return proposal
     }
@@ -139,7 +139,7 @@ extension IntelligenceModel {
             if attempt == 2 { throw IntelligenceError.invalidAnswer(issue) }
         }
         try Task.checkCancellation()
-        return try Answer(reply, in: request.snapshot)
+        return try Answer(reply, in: request.document)
     }
 
     private func combine(
@@ -164,11 +164,8 @@ extension IntelligenceModel {
                 } else {
                     if !batch.isEmpty { batches.append(batch) }
                     batch = []
-                    let snapshot = FileSnapshot(
-                        sessionID: request.snapshot.sessionID, generation: request.snapshot.generation,
-                        source: excerpt)
                     let extraction = IntelligenceRequest(
-                        snapshot: snapshot, instruction: request.instruction, id: request.id)
+                        document: MarkdownDocument(excerpt), instruction: request.instruction, id: request.id)
                     let parts = try await split(
                         body(of: extraction), request: extraction, purpose: .extract)
                     batches.append(contentsOf: parts.map { [text($0, of: extraction)] })
@@ -203,12 +200,12 @@ extension IntelligenceModel {
 
     /// The note after its front matter.
     private func body(of request: IntelligenceRequest) -> NSRange {
-        let start = MarkdownDocument(request.snapshot.source).contentStart
-        return NSRange(location: start, length: request.snapshot.source.utf16.count - start)
+        let document = request.document
+        return NSRange(document.contentStart..<NSMaxRange(document.range))
     }
 
     private func text(_ range: NSRange, of request: IntelligenceRequest) -> String {
-        (request.snapshot.source as NSString).substring(with: range)
+        request.document.text(in: range)
     }
 
     private func split(
@@ -225,9 +222,8 @@ extension IntelligenceModel {
         }
         guard source.count > 1 else { throw IntelligenceError.insufficientContext }
         let midpoint = chunk.location + chunk.length / 2
-        let headings = request.snapshot.headingOffsets.filter {
-            $0 > chunk.location && $0 < NSMaxRange(chunk)
-        }
+        let headings = request.document.blocks(in: chunk).filter { $0.kind == .heading }
+            .map(\.range.location).filter { $0 > chunk.location && $0 < NSMaxRange(chunk) }
         let heading = headings.min { abs($0 - midpoint) < abs($1 - midpoint) }
         let offset: Int
         if let heading {
@@ -267,8 +263,7 @@ extension IntelligenceModel {
         source: String, scope: NSRange? = nil,
         evidenceBlocks: [String]? = nil
     ) -> ModelPass {
-        let bodyLength =
-            request.snapshot.source.utf16.count - MarkdownDocument(request.snapshot.source).contentStart
+        let bodyLength = request.document.range.length - request.document.contentStart
         return ModelPass(
             purpose: purpose, instruction: request.instruction, source: source,
             responseTokens: min(purpose == .answer ? ModelPass.answerTokens : 1_536, contextSize / 3),

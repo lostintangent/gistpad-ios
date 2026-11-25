@@ -26,12 +26,11 @@ package struct Answer: Sendable, Equatable {
 
 extension Answer {
     /// Finds each passage the reply cites in the note's body, or throws when one isn't there.
-    init(_ reply: Reply, in snapshot: FileSnapshot) throws {
+    init(_ reply: Reply, in document: MarkdownDocument) throws {
         prose = reply.prose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : reply.prose
         guard !prose.isEmpty || !reply.quotes.isEmpty else { throw IntelligenceError.emptyAnswer }
-        let bodyStart = MarkdownDocument(snapshot.source).contentStart
         citations = try reply.quotes.map { quote in
-            let ranges = snapshot.source.exactRanges(of: quote).filter { $0.location >= bodyStart }
+            let ranges = document.text.exactRanges(of: quote).filter { $0.location >= document.contentStart }
             guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
             return Citation(text: quote, ranges: ranges)
         }

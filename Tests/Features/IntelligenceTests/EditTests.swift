@@ -8,44 +8,44 @@ struct EditTests {
     @Test func aChangeAppliesOnlyWhereItsTextMatchesExactlyOnce() throws {
         let literal = note("same same cafe\u{301}")
         let rejected = Proposal(
-            snapshot: literal,
+            document: literal,
             candidates: [change("same", "different"), change("absent", "present"), change("café", "x")])
         #expect(rejected.omittedCount == 3)
         #expect(!rejected.canApply)
 
         let repeated = note("left same\nright same")
         let disambiguated = Proposal(
-            snapshot: repeated,
+            document: repeated,
             candidates: [
                 Proposal.Change(
                     quote: "same", replacement: "different", reason: "Clarify", before: "right ")
             ])
-        #expect(try disambiguated.application(to: repeated).source == "left same\nright different")
+        #expect(try disambiguated.application().source == "left same\nright different")
 
         let overlap = note("abcdef safe")
         let overlapping = Proposal(
-            snapshot: overlap,
+            document: overlap,
             candidates: [change("abcd", "one"), change("cdef", "two"), change("safe", "kept")])
         #expect(overlapping.changes.prefix(2).allSatisfy { $0.range == nil })
-        #expect(try overlapping.application(to: overlap).source == "abcdef kept")
+        #expect(try overlapping.application().source == "abcdef kept")
     }
 
     @Test func applyingKeepsEveryOtherByte() async throws {
         let mixed = note("👩🏽‍💻 bad\r\nSecond line\r\n")
         let application = try Proposal(
-            snapshot: mixed, candidates: [change("bad", "good"), change("Second line\r\n", "")]
-        ).application(to: mixed)
+            document: mixed, candidates: [change("bad", "good"), change("Second line\r\n", "")]
+        ).application()
         #expect(application.source == "👩🏽‍💻 good\r\n")
         #expect(
-            application.mappedSelection(NSRange(location: mixed.source.utf16.count, length: 0))
+            application.mappedSelection(NSRange(location: mixed.text.utf16.count, length: 0))
                 == NSRange(location: application.source.utf16.count, length: 0))
 
         let empty = note("")
         #expect(
-            try Proposal(snapshot: empty, candidates: [change("", "A new paragraph")])
-                .application(to: empty).source == "A new paragraph")
+            try Proposal(document: empty, candidates: [change("", "A new paragraph")])
+                .application().source == "A new paragraph")
         #expect(
-            !Proposal(snapshot: empty, candidates: [change("", "First"), change("", "Second")])
+            !Proposal(document: empty, candidates: [change("", "First"), change("", "Second")])
                 .canApply)
 
         let fixture = FixtureLanguageModel()
@@ -53,24 +53,12 @@ struct EditTests {
         let unterminated = request("# Today\n\n- [ ] First", "Add Next")
         #expect(
             try await fixture.edit(unterminated)
-                .application(to: unterminated.snapshot).source == "# Today\n\n- [ ] First\n- [ ] Next")
+                .application().source == "# Today\n\n- [ ] First\n- [ ] Next")
         fixture.operations = { _ in [.insertTask(listID: 0, text: "First")] }
         let blank = request("", "Add First")
         #expect(
             try await fixture.edit(blank)
-                .application(to: blank.snapshot).source == "- [ ] First\n")
-    }
-
-    @Test func aChangedFileRefusesTheApply() throws {
-        let snapshot = note("cafe\u{301}")
-        let proposal = Proposal(snapshot: snapshot, candidates: [change(snapshot.source, "coffee")])
-        for changed in [
-            snapshot.edited(to: snapshot.source),
-            FileSnapshot(sessionID: UUID(), generation: 0, source: snapshot.source),
-            FileSnapshot(sessionID: snapshot.sessionID, generation: 0, source: "café"),
-        ] {
-            #expect(throws: IntelligenceError.self) { try proposal.application(to: changed) }
-        }
+                .application().source == "- [ ] First\n")
     }
 
     @Test func aLongFileIsCoveredEndToEndWithoutSplittingATask() async throws {
@@ -91,7 +79,7 @@ struct EditTests {
         #expect(editor.passes.first?.source.utf8.elementsEqual(prose.utf8) == true)
         #expect(editor.passes.dropFirst().map(\.source).joined().utf8.elementsEqual(prose.utf8))
         #expect(
-            try fixed.application(to: fix.snapshot).source
+            try fixed.application().source
                 == prose.replacingOccurrences(of: "bad", with: "good"))
 
         let list = (1...80).map { "- [ ] Task \($0) 👩🏽‍💻\r\n" }.joined()
@@ -104,7 +92,7 @@ struct EditTests {
         #expect(checker.passes.count > 1)
         #expect(checker.passes.dropFirst().map { MarkdownDocument($0.source).tasks.count }.reduce(0, +) == 80)
         #expect(
-            try checked.application(to: all.snapshot).source.utf8.elementsEqual(
+            try checked.application().source.utf8.elementsEqual(
                 list.replacingOccurrences(of: "[ ]", with: "[x]").utf8))
     }
 
@@ -137,9 +125,9 @@ struct EditTests {
 
             - [ ] Patch the wall
             """
-        let snapshot = note(source)
+        let document = note(source)
         let moved = Proposal(
-            snapshot: snapshot,
+            document: document,
             scopedCandidates: [
                 (change("- [ ] Paint the window trim\n", ""), NSRange(location: 0, length: source.utf16.count)),
                 (change("- [ ] Patch the wall", "- [ ] Paint the window trim\n- [ ] Patch the wall"),
@@ -147,7 +135,7 @@ struct EditTests {
             ],
             safetyInstruction: "move Paint the window trim from Kitchen to Entry")
         #expect(
-            try moved.application(to: snapshot).source
+            try moved.application().source
                 == source.replacingOccurrences(of: "- [ ] Paint the window trim\n", with: "")
                     .replacingOccurrences(
                         of: "- [ ] Patch the wall", with: "- [ ] Paint the window trim\n- [ ] Patch the wall"))
@@ -159,28 +147,28 @@ struct EditTests {
                 change("- [ ] Paint the window trim\n", "")],
         ] {
             let proposal = Proposal(
-                snapshot: note(source),
+                document: note(source),
                 scopedCandidates: edits.map {
                     ($0, NSRange(location: 0, length: source.utf16.count))
                 },
                 safetyInstruction: "move Paint the window trim from Kitchen to Entry")
             #expect(throws: IntelligenceError.invalidEdit) {
-                try proposal.application(to: proposal.snapshot)
+                try proposal.application()
             }
         }
     }
 
     @Test func movingADateDoesNotRequireAListItem() throws {
-        let snapshot = note("## Next check\n\nThe offline-pipe retest is scheduled for November 6.\n")
+        let document = note("## Next check\n\nThe offline-pipe retest is scheduled for November 6.\n")
         let proposal = Proposal(
-            snapshot: snapshot,
+            document: document,
             scopedCandidates: [
                 (change("November 6", "November 9"),
-                    NSRange(location: 0, length: snapshot.source.utf16.count))
+                    NSRange(location: 0, length: document.text.utf16.count))
             ],
             safetyInstruction: "move the offline-pipe retest from November 6 to November 9")
         #expect(
-            try proposal.application(to: snapshot).source
+            try proposal.application().source
                 == "## Next check\n\nThe offline-pipe retest is scheduled for November 9.\n")
     }
 
@@ -216,11 +204,9 @@ struct EditTests {
                     : document.blocks.last { $0.kind == .tableRow })
             let insertion = try #require(OnDeviceModel.relocatedInsertion(
                 from: candidates, for: anchor, in: document, instruction: instruction))
-            let snapshot = note(source)
-            let proposal = Proposal(
-                snapshot: snapshot, scopedCandidates: [(insertion, anchor.range)])
+            let proposal = Proposal(document: document, scopedCandidates: [(insertion, anchor.range)])
             #expect(
-                try proposal.application(to: snapshot).source
+                try proposal.application().source
                     == expected.replacingOccurrences(of: "\n", with: newline))
             #expect(change("Keep", "Kept\n\nNew").insertedText == nil)
         }
@@ -248,7 +234,7 @@ struct EditTests {
         #expect(proposal.changes.count == 2)
         #expect(proposal.omittedCount == 0)
         #expect(
-            try proposal.application(to: input.snapshot).source
+            try proposal.application().source
                 == prefix + "# Reading\r\n\r\n- River Engine\r\n- Paper Observatory\r\n\r\n## Notes\r\n\r\nKeep this.\r\n")
 
         fixture.operations = { pass in
@@ -261,14 +247,14 @@ struct EditTests {
         }
         let inserted = try await fixture.edit(input)
         #expect(
-            try inserted.application(to: input.snapshot).source
+            try inserted.application().source
                 == prefix + body.replacingOccurrences(
                     of: "## Notes\r\n\r\n", with: "## Notes\r\n\r\nA new introduction for the section.\r\n\r\n"))
     }
 
     @Test func aScopedHunkKeepsRepeatedTextOutsideTheSelectedBlock() async throws {
         let input = request("# First\n\nKeep this.\n\n# Second\n\nKeep this.\n", "Change the second note")
-        let target = (input.snapshot.source as NSString).range(of: "Keep this.", options: .backwards)
+        let target = (input.document.text as NSString).range(of: "Keep this.", options: .backwards)
         let fixture = FixtureLanguageModel()
         fixture.operations = { _ in
             [.replaceRegion(target, change("Keep this.", "Change this."))]
@@ -276,7 +262,7 @@ struct EditTests {
         let proposal = try await fixture.edit(input)
         #expect(proposal.omittedCount == 0)
         #expect(
-            try proposal.application(to: input.snapshot).source
+            try proposal.application().source
                 == "# First\n\nKeep this.\n\n# Second\n\nChange this.\n")
 
         fixture.operations = { _ in
@@ -294,17 +280,17 @@ struct EditTests {
             + ["# Morning", "", "- [ ] Read café", "", "# Housework", "", "- [x] Wash 👩🏽‍💻",
                 "- [ ] Recycle", "", "Keep  spacing.", ""].joined(separator: newline)
         let input = request(source, "Add a household task")
-        #expect(MarkdownDocument(input.snapshot.source).taskLists.map(\.count) == [1, 2])
+        #expect(MarkdownDocument(input.document.text).taskLists.map(\.count) == [1, 2])
         let fixture = FixtureLanguageModel()
         fixture.operations = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
         let recycle = "- [ ] Recycle" + newline
         #expect(
-            try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
+            try await fixture.edit(input).application().source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: recycle + "- [ ] Clean the kitchen" + newline)
                     .utf8))
         fixture.operations = { _ in [.deleteTasks(ids: [3])] }
         #expect(
-            try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
+            try await fixture.edit(input).application().source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: "").utf8))
         for operation in [
             EditOperation.insertTask(listID: 99, text: "Next"),
@@ -320,7 +306,7 @@ struct EditTests {
         let trip = request(numbered, "Add a task to lock up")
         fixture.operations = { _ in [.insertTask(listID: 1, text: "Lock up")] }
         #expect(
-            try await fixture.edit(trip).application(to: trip.snapshot).source.utf8.elementsEqual(
+            try await fixture.edit(trip).application().source.utf8.elementsEqual(
                 ["1. [ ] Pack", "2. [x] Book", "3. [ ] Lock up", "", "Notes"].joined(separator: newline).utf8))
     }
 
@@ -329,16 +315,16 @@ struct EditTests {
         fixture.operations = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
         let daily = request("## 📆 2026-10-24\n\n- [ ]", "mark everything complete")
         #expect(
-            try await fixture.edit(daily).application(to: daily.snapshot).source
+            try await fixture.edit(daily).application().source
                 == "## 📆 2026-10-24\n\n- [x]")
         let protected =
             "---\r\nexample: '- [ ] protected'\r\n---\r\n# Today\r\n\r\n- [ ] Read café\r\n"
             + "- [X] Already done\r\n> - [ ] A quoted task\r\n  - [ ]\r\n\r\n"
             + "```markdown\r\n- [ ] Not a real task\r\n```\r\nA sentence with `[ ]`.  \r\n"
         let everything = request(protected, "すべてのタスクを完了にして")
-        #expect(MarkdownDocument(everything.snapshot.source).tasks.map(\.isChecked) == [false, true, false, false])
+        #expect(MarkdownDocument(everything.document.text).tasks.map(\.isChecked) == [false, true, false, false])
         #expect(
-            try await fixture.edit(everything).application(to: everything.snapshot).source
+            try await fixture.edit(everything).application().source
                 .utf8.elementsEqual(
                     protected.replacingOccurrences(of: "- [ ] Read", with: "- [x] Read")
                         .replacingOccurrences(of: "> - [ ] A", with: "> - [x] A")
@@ -348,12 +334,12 @@ struct EditTests {
         fixture.operations = { _ in [.setTaskStates(ids: [1, 2], isComplete: true)] }
         let subset = request(source, "mark the first two done")
         #expect(
-            try await fixture.edit(subset).application(to: subset.snapshot).source
+            try await fixture.edit(subset).application().source
                 == source.replacingOccurrences(of: "[ ] Read", with: "[x] Read"))
         fixture.operations = { _ in [.setTaskStates(ids: nil, isComplete: false)] }
         let uncheck = request(source, "uncheck all")
         #expect(
-            try await fixture.edit(uncheck).application(to: uncheck.snapshot).source
+            try await fixture.edit(uncheck).application().source
                 == source.replacingOccurrences(of: "[X]", with: "[ ]"))
         for ids in [[99], [1, 1], []] {
             fixture.operations = { _ in [.setTaskStates(ids: ids, isComplete: true)] }
@@ -415,7 +401,7 @@ struct EditTests {
             fixture.operations = rewrite(revision)
             let input = request(source, "Edit")
             return try await fixture.edit(input)
-                .application(to: input.snapshot).source.replacingOccurrences(of: newline, with: "\n")
+                .application().source.replacingOccurrences(of: newline, with: "\n")
         }
         let daily = "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n"
         #expect(
@@ -486,7 +472,7 @@ struct EditTests {
         #expect(fixture.passes.map(\.source) == ["# Note\n"])
         #expect(fixture.passes.map(\.isPart) == [false])
         #expect(
-            try proposal.application(to: dated.snapshot).source == "---\ndate: 2025-01-01\n---\n# Today\n")
+            try proposal.application().source == "---\ndate: 2025-01-01\n---\n# Today\n")
 
         // A rewrite too long for one reply isn't retried in parts.
         let failing = FixtureLanguageModel()

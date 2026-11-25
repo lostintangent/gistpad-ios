@@ -1,16 +1,5 @@
 import Foundation
-
-package struct FileSnapshot: Sendable, Equatable {
-    let sessionID: UUID
-    let generation: UInt64
-    package let source: String
-    var headingOffsets: [Int] = []
-
-    package static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.sessionID == rhs.sessionID && lhs.generation == rhs.generation
-            && lhs.source.utf8.elementsEqual(rhs.source.utf8)
-    }
-}
+import Markdown
 
 package enum IntelligenceAction: String, CaseIterable, Sendable {
     case ask, edit, review
@@ -26,7 +15,7 @@ package enum IntelligenceAction: String, CaseIterable, Sendable {
 
 package struct IntelligenceRequest: Sendable {
     package let id: UUID
-    package let snapshot: FileSnapshot
+    package let document: MarkdownDocument
     let instruction: String
 
     /// Where a long request is, for the sheet's progress label.
@@ -38,9 +27,9 @@ package struct IntelligenceRequest: Sendable {
         case answering
     }
 
-    package init(snapshot: FileSnapshot, instruction: String = "", id: UUID = UUID()) {
+    package init(document: MarkdownDocument, instruction: String = "", id: UUID = UUID()) {
         self.id = id
-        self.snapshot = snapshot
+        self.document = document
         self.instruction = instruction
     }
 }
@@ -56,7 +45,7 @@ package enum IntelligenceError: LocalizedError, Sendable, Equatable {
     case responseTooLarge
     case unverifiedQuotation
     case noEvidence
-    case staleSnapshot
+    case noteChanged
     case noApplicableChanges
     case refused
     case rateLimited
@@ -103,7 +92,7 @@ package enum IntelligenceError: LocalizedError, Sendable, Equatable {
                 localized: "A quoted passage didn’t match your file.", bundle: .module)
         case .noEvidence:
             String(localized: "I couldn’t find that in this file.", bundle: .module)
-        case .staleSnapshot:
+        case .noteChanged:
             String(
                 localized: "This file has changed since this result.",
                 bundle: .module)

@@ -100,10 +100,9 @@
             editor.textViewDidChange(editor.textView)
             await undoGroupCloses(in: undo)
             let typed = source + "!"
-            let snapshot = editor.snapshot()
-            let note = NSRange(location: 0, length: snapshot.source.utf16.count)
+            let note = editor.document.range
             let proposal = Proposal(
-                snapshot: snapshot,
+                document: editor.document,
                 scopedCandidates: [
                     (Proposal.Change(quote: "teh", replacement: "the", reason: "Spelling."), note),
                     (Proposal.Change(quote: "before", replacement: "after", reason: "Timing."), note),

@@ -14,7 +14,7 @@ package enum EditOperation: Sendable {
     /// The changes this makes to the note, each with the range it may change. `scope` is the part
     /// of the note the pass showed the model.
     func changes(
-        in snapshot: FileSnapshot, pass: ModelPass, scope: NSRange
+        in note: MarkdownDocument, pass: ModelPass, scope: NSRange
     ) throws -> [(Proposal.Change, NSRange)] {
         switch self {
         case .setTaskStates(let ids, let isComplete):
@@ -53,7 +53,6 @@ package enum EditOperation: Sendable {
                 !text.contains(where: \.isNewline)
             else { throw IntelligenceError.invalidEdit }
             let reason = String(localized: "Add this task.", bundle: .module)
-            let note = MarkdownDocument(snapshot.source)
             if listID == 0, note.tasks.isEmpty {
                 return [note.edit(appendingTasks: text).change(at: 0, reason: reason)]
             }
@@ -69,7 +68,7 @@ package enum EditOperation: Sendable {
             guard relative.location >= 0, NSMaxRange(relative) <= scope.length
             else { throw IntelligenceError.invalidResponse }
             return try Proposal.Change.lineChanges(
-                in: snapshot.source,
+                in: note.text,
                 visible: NSRange(location: scope.location + relative.location, length: relative.length),
                 revised: revised)
         case .replaceRegion(let relative, let change):

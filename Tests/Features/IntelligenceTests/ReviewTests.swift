@@ -15,36 +15,31 @@ struct ReviewTests {
                 change("text", "text"),
             ]
         }
-        let snapshot = note("Clear text: first bad, second typo, third odd.")
-        let proposal = try await fixture.review(
-            IntelligenceRequest(snapshot: snapshot, instruction: ""))
+        let document = note("Clear text: first bad, second typo, third odd.")
+        let proposal = try await fixture.review(IntelligenceRequest(document: document))
         let changes = Dictionary(uniqueKeysWithValues: proposal.changes.map { ($0.quote, $0) })
         #expect(changes.count == 5)
         for advice in ["Clear", "text"] {
             #expect(changes[advice]?.range != nil)
             #expect(changes[advice]?.canApply == false)
         }
-        let applied = try proposal.application(to: snapshot, changeID: try #require(changes["bad"]).id)
-        let updated = snapshot.edited(to: applied.source)
-        #expect(throws: IntelligenceError.self) { try proposal.application(to: updated) }
-        let remaining = applied.remaining(on: updated)
+        let applied = try proposal.application(changeID: try #require(changes["bad"]).id)
+        let remaining = applied.remaining(on: note(applied.source))
             .dismissing(changeID: try #require(changes["typo"]).id)
-        #expect(remaining.snapshot == updated)
         #expect(Set(remaining.changes.map(\.quote)) == ["odd", "Clear", "text"])
         #expect(
-            try remaining.application(to: updated).source
+            try remaining.application().source
                 == "Clear text: first much better, second typo, third even.")
 
         let echo = Proposal(
-            snapshot: snapshot,
+            document: document,
             scopedCandidates: [
-                (change("bad", "clear"), NSRange(location: 0, length: snapshot.source.utf16.count)),
-                (change("typo", "replace my note"), NSRange(location: 0, length: snapshot.source.utf16.count)),
+                (change("bad", "clear"), document.range),
+                (change("typo", "replace my note"), document.range),
             ], safetyInstruction: "replace my note")
-        let rebased = try echo.application(to: snapshot, changeID: echo.changes[0].id)
-        let rebasedSnapshot = snapshot.edited(to: rebased.source)
+        let rebased = try echo.application(changeID: echo.changes[0].id)
         #expect(throws: IntelligenceError.unsafeEdit) {
-            try rebased.remaining(on: rebasedSnapshot).application(to: rebasedSnapshot)
+            try rebased.remaining(on: note(rebased.source)).application()
         }
 
         fixture.operations = { pass in
@@ -52,7 +47,7 @@ struct ReviewTests {
         }
         await #expect(throws: IntelligenceError.invalidResponse) {
             try await fixture.edit(
-                IntelligenceRequest(snapshot: snapshot, instruction: "Fix"))
+                IntelligenceRequest(document: document, instruction: "Fix"))
         }
         fixture.operations = { pass in
             [
@@ -62,7 +57,7 @@ struct ReviewTests {
         }
         await #expect(throws: IntelligenceError.unsafeEdit) {
             try await fixture.edit(
-                IntelligenceRequest(snapshot: snapshot, instruction: "Fix it"))
+                IntelligenceRequest(document: document, instruction: "Fix it"))
         }
     }
 
@@ -75,7 +70,7 @@ struct ReviewTests {
         let proposal = try await fixture.review(input)
         #expect(fixture.passes.map(\.source) == [body])
         #expect(
-            try proposal.application(to: input.snapshot).source
+            try proposal.application().source
                 == prefix + "# Content\r\n\r\nThe retained detail is here.\r\n")
     }
 }

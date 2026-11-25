@@ -1,5 +1,6 @@
 #if canImport(UIKit)
     import Editor
+    import Markdown
     import Observation
     import OSLog
     import UIKit
@@ -19,7 +20,7 @@
         var proposal: Proposal?
         var appliedEdit: Proposal?
         var appliedCount = 0
-        private(set) var snapshot: FileSnapshot?
+        private(set) var document: MarkdownDocument?
         private(set) var task: Task<Void, Never>?
 
         init(editor: MarkdownEditor, model: any IntelligenceModel = OnDeviceModel()) {
@@ -36,11 +37,7 @@
 
         var isRunning: Bool { task != nil }
 
-        var isStale: Bool {
-            guard let snapshot else { return false }
-            return editor.id != snapshot.sessionID || editor.generation != snapshot.generation
-                || !editor.document.text.utf8.elementsEqual(snapshot.source.utf8)
-        }
+        var isStale: Bool { document.map { $0 != editor.document } ?? false }
 
         var availabilityReason: String? { model.unavailableReason }
 
@@ -66,7 +63,7 @@
             proposal = nil
             appliedEdit = nil
             appliedCount = 0
-            snapshot = nil
+            document = nil
         }
 
         func generate() {
@@ -85,10 +82,10 @@
                     self.task = nil
                 }
                 do {
-                    let snapshot = self.editor.snapshot()
-                    self.snapshot = snapshot
+                    let document = self.editor.document
+                    self.document = document
                     let request = IntelligenceRequest(
-                        snapshot: snapshot, instruction: instruction, id: requestID)
+                        document: document, instruction: instruction, id: requestID)
                     switch selectedAction {
                     case .ask:
                         self.answer = try await self.model.ask(
@@ -128,7 +125,7 @@
                 let remaining = try editor.apply(proposal, changeID: changeID)
                 if action == .edit { appliedEdit = proposal }
                 self.proposal = remaining
-                snapshot = remaining.snapshot
+                document = remaining.document
                 appliedCount += proposal.changes.count - remaining.changes.count
                 errorMessage = nil
                 notice = String(

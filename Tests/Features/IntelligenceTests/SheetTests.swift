@@ -33,6 +33,20 @@
             #expect(state.appliedCount == 2)
         }
 
+        @Test func aChangedFileRefusesTheApply() async throws {
+            let editor = MarkdownEditor(text: source)
+            let state = IntelligenceState(editor: editor, model: FixtureLanguageModel())
+            state.action = .review
+            state.generate()
+            await state.task?.value
+            let proposal = try #require(state.proposal)
+            try editor.apply(editor.document.edit(replacing: NSRange(location: 0, length: 0), with: "# "))
+            #expect(state.isStale)
+            #expect(!state.canApply)
+            #expect(throws: MarkdownEditor.Failure.changed) { try editor.apply(proposal) }
+            #expect(editor.document.text == "# " + source)
+        }
+
         enum AskFailure: Sendable {
             case unavailable, error(IntelligenceError), answer(Answer.Reply)
         }

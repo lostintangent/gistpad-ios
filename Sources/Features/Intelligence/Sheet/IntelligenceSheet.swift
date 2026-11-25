@@ -53,7 +53,7 @@
                     if state.isStale {
                         Section {
                             Label(
-                                IntelligenceError.staleSnapshot.localizedDescription,
+                                IntelligenceError.noteChanged.localizedDescription,
                                 systemImage: "arrow.clockwise")
                         }
                     }

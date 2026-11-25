@@ -1,31 +1,18 @@
-import Foundation
-import Editor
-import Markdown
-
-extension FileSnapshot {
-    package init(parsing source: String, sessionID: UUID, generation: UInt64) {
-        let document = MarkdownDocument(source)
-        self.init(
-            sessionID: sessionID, generation: generation, source: source,
-            headingOffsets: document.blocks.filter { $0.kind == .heading }.map(\.range.location))
-    }
-}
-
 #if canImport(UIKit)
-    import UIKit
+    import Editor
+    import Foundation
 
     extension MarkdownEditor {
-        func snapshot() -> FileSnapshot {
-            FileSnapshot(parsing: document.text, sessionID: id, generation: generation)
-        }
-
+        /// Applies the proposal as one undoable edit made from the note it was proposed for, which the
+        /// editor refuses once the note has changed.
         func apply(_ proposal: Proposal, changeID: UUID? = nil) throws -> Proposal {
-            let application = try proposal.application(to: snapshot(), changeID: changeID)
+            let application = try proposal.application(changeID: changeID)
+            let note = proposal.document
             try apply(
-                document.edit(
-                    replacing: document.range, with: application.source,
+                note.edit(
+                    replacing: note.range, with: application.source,
                     selection: application.mappedSelection(selection)))
-            return application.remaining(on: self.snapshot())
+            return application.remaining(on: document)
         }
     }
 #endif

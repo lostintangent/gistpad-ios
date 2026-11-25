@@ -2,7 +2,7 @@ import Foundation
 import Markdown
 
 package struct Proposal: Sendable {
-    let snapshot: FileSnapshot
+    let document: MarkdownDocument
     package let changes: [Change]
     fileprivate let safetyInstruction: String?
 
@@ -10,18 +10,18 @@ package struct Proposal: Sendable {
     var canApply: Bool { changes.contains { $0.canApply } }
 
     init(
-        snapshot: FileSnapshot, scopedCandidates: [(Change, NSRange)],
+        document: MarkdownDocument, scopedCandidates: [(Change, NSRange)],
         safetyInstruction: String? = nil
     ) {
-        self.snapshot = snapshot
+        self.document = document
         self.safetyInstruction = safetyInstruction
         var anchored = scopedCandidates.map { change, scope in
             var change = change
             // An empty quote inserts at an empty scope.
             let matches =
                 change.quote.isEmpty
-                ? (scope.length == 0 && Range(scope, in: snapshot.source) != nil ? [scope] : [])
-                : snapshot.source.exactRanges(
+                ? (scope.length == 0 && Range(scope, in: document.text) != nil ? [scope] : [])
+                : document.text.exactRanges(
                     of: change.quote, within: scope, before: change.before, after: change.after)
             change.range = matches.count == 1 ? matches[0] : nil
             return change
@@ -47,31 +47,29 @@ package struct Proposal: Sendable {
     }
 
     init(
-        snapshot: FileSnapshot, changes: [Change], safetyInstruction: String? = nil
+        document: MarkdownDocument, changes: [Change], safetyInstruction: String? = nil
     ) {
-        self.snapshot = snapshot
+        self.document = document
         self.changes = changes
         self.safetyInstruction = safetyInstruction
     }
 
     func dismissing(changeID: UUID) -> Proposal {
         Proposal(
-            snapshot: snapshot, changes: changes.filter { $0.id != changeID },
+            document: document, changes: changes.filter { $0.id != changeID },
             safetyInstruction: safetyInstruction)
     }
 
-    package func application(
-        to current: FileSnapshot, changeID: UUID? = nil
-    ) throws -> Applied {
-        guard current == snapshot else { throw IntelligenceError.staleSnapshot }
+    /// The note with the selected changes made, or every applicable change when `changeID` is nil.
+    package func application(changeID: UUID? = nil) throws -> Applied {
         let selected = changes.filter { $0.canApply && (changeID == nil || $0.id == changeID) }
         guard !selected.isEmpty else { throw IntelligenceError.noApplicableChanges }
-        var source = snapshot.source
+        var source = document.text
         for change in selected.sorted(by: { ($0.range?.location ?? 0) > ($1.range?.location ?? 0) }) {
             guard let range = change.range, let replacement = change.replacement,
                 let swiftRange = Range(range, in: source),
                 source[swiftRange].utf8.elementsEqual(change.quote.utf8)
-            else { throw IntelligenceError.staleSnapshot }
+            else { throw IntelligenceError.noteChanged }
             source.replaceSubrange(swiftRange, with: replacement)
         }
         try validateApplication(source, changes: selected)
@@ -81,9 +79,8 @@ package struct Proposal: Sendable {
     }
 
     private func validateApplication(_ replacement: String, changes: [Change]) throws {
-        let source = snapshot.source
+        let source = document.text
         guard let safetyInstruction, !source.isEmpty else { return }
-        let document = MarkdownDocument(source)
         let original = document.listItems(movedBy: safetyInstruction)
         if !original.isEmpty {
             guard original.count == 1 else { throw IntelligenceError.invalidEdit }
@@ -165,7 +162,7 @@ extension Proposal {
         }
 
         /// The changes left on the note this application produced, re-verified at their new ranges.
-        func remaining(on snapshot: FileSnapshot) -> Proposal {
+        func remaining(on document: MarkdownDocument) -> Proposal {
             let appliedIDs = Set(applied.map(\.id))
             let remaining = proposal.changes.filter { !appliedIDs.contains($0.id) }.map { change in
                 var change = change
@@ -180,7 +177,7 @@ extension Proposal {
                 return change
             }
             return Proposal(
-                snapshot: snapshot, changes: remaining,
+                document: document, changes: remaining,
                 safetyInstruction: proposal.safetyInstruction)
         }
 

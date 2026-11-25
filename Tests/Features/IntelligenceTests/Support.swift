@@ -1,13 +1,12 @@
 import Foundation
+import Markdown
 
 @testable import Intelligence
 
-func note(_ source: String) -> FileSnapshot {
-    FileSnapshot(parsing: source, sessionID: UUID(), generation: 0)
-}
+func note(_ source: String) -> MarkdownDocument { MarkdownDocument(source) }
 
 func request(_ source: String, _ instruction: String = "") -> IntelligenceRequest {
-    IntelligenceRequest(snapshot: note(source), instruction: instruction)
+    IntelligenceRequest(document: note(source), instruction: instruction)
 }
 
 /// The model revising everything it was shown.
@@ -20,17 +19,7 @@ func change(_ quote: String, _ replacement: String?) -> Proposal.Change {
 }
 
 extension Proposal {
-    init(snapshot: FileSnapshot, candidates: [Proposal.Change]) {
-        self.init(
-            snapshot: snapshot,
-            scopedCandidates: candidates.map {
-                ($0, NSRange(location: 0, length: snapshot.source.utf16.count))
-            })
-    }
-}
-
-extension FileSnapshot {
-    func edited(to source: String) -> FileSnapshot {
-        FileSnapshot(sessionID: sessionID, generation: generation + 1, source: source)
+    init(document: MarkdownDocument, candidates: [Proposal.Change]) {
+        self.init(document: document, scopedCandidates: candidates.map { ($0, document.range) })
     }
 }

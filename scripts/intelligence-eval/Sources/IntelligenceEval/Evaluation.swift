@@ -66,8 +66,7 @@ enum Evaluator {
                     let duration = start.duration(to: .now).components
                     return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
                 }
-                let snapshot = snapshot(item.source)
-                let request = IntelligenceRequest(snapshot: snapshot, instruction: item.prompt)
+                let request = IntelligenceRequest(document: MarkdownDocument(item.source), instruction: item.prompt)
                 let model = RecordingModel()
                 var answerSeconds: Double?
                 var preparationSeconds: Double?
@@ -133,14 +132,14 @@ enum Evaluator {
                         if let issues = item.reviewIssues {
                             // A review with nothing to apply is an answer, and the only right one for a clean note.
                             do {
-                                proposed = try proposal.application(to: request.snapshot).source
+                                proposed = try proposal.application().source
                             } catch IntelligenceError.noApplicableChanges {}
                             expectationFailure = reviewFailure(
                                 issues: issues, in: item.source,
                                 anchored: proposal.changes.compactMap(\.range), omitted: proposal.omittedCount)
                             passed = expectationFailure == nil
                         } else {
-                            let application = try proposal.application(to: request.snapshot)
+                            let application = try proposal.application()
                             proposed = application.source
                             if let expected = item.expectedSource {
                                 passed =
@@ -162,7 +161,7 @@ enum Evaluator {
                                 }
                             } else if let addedText = item.addedTaskText {
                                 passed = addedTaskPasses(
-                                    application: application, original: snapshot,
+                                    application: application, original: request.document,
                                     expectedText: addedText, expectedList: item.addedTaskListTitle)
                             } else {
                                 passed = false
@@ -185,12 +184,8 @@ enum Evaluator {
         }
     }
 
-    private static func snapshot(_ source: String) -> FileSnapshot {
-        FileSnapshot(parsing: source, sessionID: UUID(), generation: 0)
-    }
-
     private static func addedTaskPasses(
-        application: Proposal.Applied, original: FileSnapshot, expectedText: String,
+        application: Proposal.Applied, original: MarkdownDocument, expectedText: String,
         expectedList: String?
     ) -> Bool {
         guard application.proposal.omittedCount == 0, application.applied.count == 1 else {
@@ -199,7 +194,7 @@ enum Evaluator {
         let source = application.source as NSString
         let document = MarkdownDocument(application.source)
         let tasks = document.tasks
-        guard tasks.count == MarkdownDocument(original.source).tasks.count + 1 else { return false }
+        guard tasks.count == original.tasks.count + 1 else { return false }
         // The added task is the line whose removal, with one of its line breaks, restores every byte.
         let added = tasks.first { task in
             let line = source.lineRange(for: task.range)
@@ -212,7 +207,7 @@ enum Evaluator {
                     for: NSRange(location: line.location - 1, length: 0))
             }
             return [line, NSRange(location: previousEnd, length: lineEnd - previousEnd)].contains {
-                source.replacingCharacters(in: $0, with: "").utf8.elementsEqual(original.source.utf8)
+                source.replacingCharacters(in: $0, with: "").utf8.elementsEqual(original.text.utf8)
             }
         }
         guard let task = added, !task.isChecked,
