@@ -65,7 +65,8 @@ refuses redirects, and a body that doesn't decode is `.invalidResponse`.
 Supabase refusing the session offers `.reconnect`, a request GitHub or image
 storage may take next time offers `.tryAgain`, and GistPad's own errors keep
 their sentence with no fix. Anything else, offline included, says GitHub couldn't be reached and
-offers `.tryAgain`, never the system's wording.
+offers `.tryAgain`, never the system's wording. A failure for an alert also has a
+`title` that says what didn't happen, like `Couldn’t Pin “Ideas”`.
 
 ## Drafts
 

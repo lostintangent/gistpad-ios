@@ -2,7 +2,7 @@ import Auth
 import Foundation
 
 /// Something you asked for that didn't happen: why, in one true sentence, and the one thing that
-/// may fix it.
+/// may fix it. An alert also says what didn't happen.
 public struct Failure: Error, Equatable, Sendable {
     public enum Action: Sendable {
         /// GitHub may answer next time.
@@ -11,18 +11,22 @@ public struct Failure: Error, Equatable, Sendable {
         case reconnect
     }
 
+    /// What didn't happen, like `Couldn’t Pin “Ideas”`, for an alert. A failure shown in place
+    /// reads under its view's own title instead.
+    public var title: String?
     public let message: String
     /// Nothing offers a fix when neither trying again nor signing in would help.
     public let action: Action?
 
-    public init(_ message: String, action: Action? = nil) {
+    public init(_ message: String, action: Action? = nil, title: String? = nil) {
+        self.title = title
         self.message = message
         self.action = action
     }
 
     /// Why `error` stopped what you asked for. GistPad's own errors keep their sentence, and anything
     /// else, offline included, says GitHub couldn't be reached rather than the system's wording.
-    public init(_ error: any Error) {
+    public init(_ error: any Error, title: String? = nil) {
         switch error {
         case let failure as Failure:
             self = failure
@@ -41,9 +45,10 @@ public struct Failure: Error, Equatable, Sendable {
         default:
             self.init(error.localizedDescription)
         }
+        if let title { self.title = title }
     }
 }
 
 extension Failure: LocalizedError {
-    public var errorDescription: String? { message }
+    public var errorDescription: String? { title ?? message }
 }
