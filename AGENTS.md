@@ -41,6 +41,7 @@ Simple, high-confidence changes don't wait for steps 4 and 5. When the user asks
 - Device builds need Apple Developer team `RHFNBL7EG4`.
 - Node.js runs `scripts/preview-renderer`. The Intelligence eval needs Apple Intelligence on the Mac.
 - Check API names against the installed SDK and developer.apple.com, not memory.
+- Never attach `lldb`, `sample`, `vmmap`, `footprint` or another debugging tool to a process. Developer mode is off on this Mac, so each one raises a password prompt nobody can answer. While it waits, taskgated stops, and simulator launches start the app but never return. If that happens, an orphaned `debugserver` and a `SecurityAgent` are waiting, and ending both clears it.
 - Indent Swift with 4 spaces, Xcode's default. `.git-blame-ignore-revs` lists whitespace-only commits, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes local blame skip them too.
 
 ## The build slot
