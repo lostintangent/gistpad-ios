@@ -113,10 +113,7 @@ enum Evaluator {
                                 }
                             })
                         answerSeconds = elapsed()
-                        let text = response.compactMap { part -> String? in
-                            if case .prose(let text) = part { return text }
-                            return nil
-                        }.joined(separator: "\n\n")
+                        let text = response.prose
                         answer = text
                         expectationFailure = answerFailure(text, for: item)
                         passed = expectationFailure == nil
@@ -258,7 +255,7 @@ enum Evaluator {
         guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "emptyAnswer"
         }
-        if let issue = ModelAnswer.Issue.check(answer, source: item.source, instruction: item.prompt) {
+        if let issue = Answer.Reply(prose: answer).issue(answering: item.prompt, in: item.source) {
             return issue.rawValue
         }
         if let maximum = item.maximumAnswerWords,
@@ -420,14 +417,14 @@ final class RecordingModel: IntelligenceModel {
     func excerpts(for pass: ModelPass) async throws -> [String] {
         try await model.excerpts(for: pass)
     }
-    func streamAnswer(
-        for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-    ) async throws -> ModelAnswer {
+    func reply(
+        to pass: ModelPass, onUpdate: @MainActor (String) -> Void
+    ) async throws -> Answer.Reply {
         answerCalls += 1
-        let answer = try await model.streamAnswer(for: pass, onUpdate: onUpdate)
-        if ModelAnswer.Issue.check(answer.prose, source: pass.source, instruction: pass.instruction) != nil {
-            rejectedAnswers.append(answer.prose)
+        let reply = try await model.reply(to: pass, onUpdate: onUpdate)
+        if reply.issue(answering: pass.instruction, in: pass.source) != nil {
+            rejectedAnswers.append(reply.prose)
         }
-        return answer
+        return reply
     }
 }

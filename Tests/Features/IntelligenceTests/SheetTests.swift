@@ -34,11 +34,11 @@
         }
 
         enum AskFailure: Sendable {
-            case unavailable, error(IntelligenceError), answer(ModelAnswer)
+            case unavailable, error(IntelligenceError), answer(Answer.Reply)
         }
 
         @Test(arguments: [
-            AskFailure.unavailable, .error(.refused), .answer(ModelAnswer(prose: " \r\n\t")),
+            AskFailure.unavailable, .error(.refused), .answer(Answer.Reply(prose: " \r\n\t")),
         ])
         func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
             let editor = MarkdownEditor(text: source)
@@ -57,7 +57,7 @@
             let reason = state.errorMessage ?? state.availabilityReason ?? ""
             #expect(!reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             #expect(!state.isRunning)
-            #expect(state.answerParts.isEmpty)
+            #expect(state.answer == nil)
             #expect(state.askPrompt == "When do I leave?")
             #expect(editor.document.text == source)
             #expect(editor.generation == 0)
@@ -76,7 +76,7 @@
             state.cancel()
             await state.task?.value
             #expect(!state.isRunning)
-            #expect(state.answerParts.isEmpty)
+            #expect(state.answer == nil)
             #expect(state.notice != nil)
             #expect(state.errorMessage == nil)
             #expect(state.askPrompt == "When do I leave?")
@@ -110,16 +110,13 @@
             let text = prefix + "# Content\n\nA retained thought about e\u{301} 👩🏽‍💻."
             let editor = MarkdownEditor(text: text, generation: 8, showsFrontMatter: shown)
             let fixture = FixtureLanguageModel()
-            fixture.answer = ModelAnswer(
+            fixture.answer = Answer.Reply(
                 prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])
             let state = IntelligenceState(editor: editor, model: fixture)
             state.askPrompt = "What thought did I retain?"
             state.generate()
             await state.task?.value
-            guard case .quotation(_, let ranges) = try #require(state.answerParts.last) else {
-                Issue.record("Expected a verified quotation")
-                return
-            }
+            let ranges = try #require(state.answer?.citations.last?.ranges)
             let reference = try #require(ranges.first)
             #expect(ranges.count == 1)
             #expect(reference.location >= prefix.utf16.count)

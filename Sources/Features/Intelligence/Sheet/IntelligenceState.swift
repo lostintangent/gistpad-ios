@@ -15,7 +15,7 @@
         var errorMessage: String?
         var notice: String?
         var progress: IntelligenceRequest.Progress?
-        var answerParts: [AnswerPart] = []
+        var answer: Answer?
         var proposal: Proposal?
         var appliedEdit: Proposal?
         var appliedCount = 0
@@ -55,14 +55,14 @@
         }
 
         var hasResults: Bool {
-            !answerParts.isEmpty || proposal != nil || appliedEdit != nil
+            answer != nil || proposal != nil || appliedEdit != nil
         }
 
         func clearResults() {
             errorMessage = nil
             notice = nil
             progress = nil
-            answerParts = []
+            answer = nil
             proposal = nil
             appliedEdit = nil
             appliedCount = 0
@@ -91,10 +91,10 @@
                         snapshot: snapshot, instruction: instruction, id: requestID)
                     switch selectedAction {
                     case .ask:
-                        self.answerParts = try await self.model.ask(
+                        self.answer = try await self.model.ask(
                             request, progress: { self.progress = $0 },
                             onPartialAnswer: { text in
-                                self.answerParts = text.isEmpty ? [] : [.prose(text)]
+                                self.answer = text.isEmpty ? nil : Answer(prose: text)
                             })
                     case .edit:
                         self.proposal = try await self.model.edit(request, progress: { self.progress = $0 })
@@ -102,10 +102,10 @@
                         self.proposal = try await self.model.review(request, progress: { self.progress = $0 })
                     }
                 } catch is CancellationError {
-                    if selectedAction == .ask { self.answerParts = [] }
+                    if selectedAction == .ask { self.answer = nil }
                     self.notice = String(localized: "Cancelled. Your file is unchanged.", bundle: .module)
                 } catch {
-                    if selectedAction == .ask { self.answerParts = [] }
+                    if selectedAction == .ask { self.answer = nil }
                     self.errorMessage = error.localizedDescription
                     let failure =
                         (error as? IntelligenceError).map { String(describing: $0) }

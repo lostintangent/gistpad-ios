@@ -9,9 +9,10 @@ package protocol IntelligenceModel {
     /// Edit's operations, or Review's suggestions as replacements.
     func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
     func excerpts(for pass: ModelPass) async throws -> [String]
-    func streamAnswer(
-        for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-    ) async throws -> ModelAnswer
+    /// Ask's reply, streaming its visible prose to `onUpdate`.
+    func reply(
+        to pass: ModelPass, onUpdate: @MainActor (String) -> Void
+    ) async throws -> Answer.Reply
 }
 
 package struct ModelPass: Sendable {
@@ -71,9 +72,4 @@ package enum ModelEdit: Sendable {
     /// The app compares it line by line.
     case rewriteRegion(NSRange, revised: String)
     case replaceRegion(NSRange, Proposal.Change)
-}
-
-package struct ModelAnswer: Sendable, Equatable {
-    package var prose: String
-    var quotes: [String] = []
 }

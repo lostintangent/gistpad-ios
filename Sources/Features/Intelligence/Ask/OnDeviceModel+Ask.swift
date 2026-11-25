@@ -21,9 +21,9 @@ extension OnDeviceModel {
         }
     }
 
-    package func streamAnswer(
-        for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-    ) async throws -> ModelAnswer {
+    package func reply(
+        to pass: ModelPass, onUpdate: @MainActor (String) -> Void
+    ) async throws -> Answer.Reply {
         try await perform(pass: pass) {
             let stream = session(for: pass).streamResponse(
                 to: try Self.prompt(for: pass),
@@ -43,7 +43,7 @@ extension OnDeviceModel {
 
     // Platform gap: a guided answer with source IDs came back malformed in 27 of 132 Ask runs, so Ask
     // streams prose ending in a Sources line. Remove when a Generable answer passes the Ask eval.
-    static func parseAnswer(_ content: String, blocks: [SourceBlock]) throws -> ModelAnswer {
+    static func parseAnswer(_ content: String, blocks: [SourceBlock]) throws -> Answer.Reply {
         let response = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let marker = /(?i)(?:\n|[ \t]+)\[?sources:\s*([0-9]+(?:\s*,\s*[0-9]+)*)\]?\s*$/
         let match = response.firstMatch(of: marker)
@@ -72,7 +72,7 @@ extension OnDeviceModel {
         } else {
             ids = []
         }
-        return ModelAnswer(prose: prose, quotes: try SourceBlock.quotations(ids: ids, from: blocks))
+        return Answer.Reply(prose: prose, quotes: try SourceBlock.quotations(ids: ids, from: blocks))
     }
 
     static func visibleAnswer(_ content: String) -> String {

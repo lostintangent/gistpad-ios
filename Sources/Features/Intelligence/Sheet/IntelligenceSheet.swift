@@ -159,24 +159,25 @@
             }
         }
 
+        @ViewBuilder
         private var answer: some View {
-            ForEach(state.answerParts.enumerated(), id: \.offset) { _, part in
-                switch part {
-                case .prose(let text):
-                    Section { Text(text).textSelection(.enabled) }
-                case .quotation(let quote, let ranges):
+            if let answer = state.answer {
+                if !answer.prose.isEmpty {
+                    Section { Text(answer.prose).textSelection(.enabled) }
+                }
+                ForEach(answer.citations.enumerated(), id: \.offset) { _, citation in
                     Section {
-                        Text(quote).textSelection(.enabled)
-                        if ranges.count == 1, let range = ranges.first {
+                        Text(citation.text).textSelection(.enabled)
+                        if citation.ranges.count == 1, let range = citation.ranges.first {
                             Button(
                                 String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"
                             ) { reveal(range) }
                             .disabled(state.isStale)
-                        } else if ranges.count > 1 {
+                        } else if citation.ranges.count > 1 {
                             Menu(
                                 String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"
                             ) {
-                                ForEach(ranges.enumerated(), id: \.offset) { index, range in
+                                ForEach(citation.ranges.enumerated(), id: \.offset) { index, range in
                                     Button(String(localized: "Match \(index + 1)", bundle: .module)) {
                                         reveal(range)
                                     }

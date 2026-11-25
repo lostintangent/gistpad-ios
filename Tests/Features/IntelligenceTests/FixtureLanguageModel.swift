@@ -13,7 +13,7 @@ import Foundation
     var isHeld = false
     var failure: (any Error)?
     var nextFailure: (any Error)?
-    var answer = ModelAnswer(
+    var answer = Answer.Reply(
         prose: "You leave at 9am, an hour after the cafe opens.", quotes: ["Leave at 9am"])
     var partialAnswers: [String] = []
     var changes: (ModelPass) -> [ModelEdit] = { _ in
@@ -44,9 +44,9 @@ import Foundation
         return excerpts(pass)
     }
 
-    func streamAnswer(
-        for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-    ) async throws -> ModelAnswer {
+    func reply(
+        to pass: ModelPass, onUpdate: @MainActor (String) -> Void
+    ) async throws -> Answer.Reply {
         try await record(pass)
         for partial in partialAnswers.isEmpty ? [answer.prose] : partialAnswers {
             onUpdate(partial)

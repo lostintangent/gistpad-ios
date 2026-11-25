@@ -167,7 +167,7 @@ extension IntelligenceModel {
         _ request: IntelligenceRequest,
         progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in },
         onPartialAnswer: @MainActor (String) -> Void = { _ in }
-    ) async throws -> [AnswerPart] {
+    ) async throws -> Answer {
         try Task.checkCancellation()
         if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
         logger.notice(
@@ -209,12 +209,12 @@ extension IntelligenceModel {
             input = try await combine(evidence, request: request, progress: progress)
         }
         progress(.answering)
-        var generated = ModelAnswer(prose: "")
+        var reply = Answer.Reply(prose: "")
         for attempt in 1...2 {
             try Task.checkCancellation()
             onPartialAnswer("")
             do {
-                generated = try await streamAnswer(for: input, onUpdate: onPartialAnswer)
+                reply = try await self.reply(to: input, onUpdate: onPartialAnswer)
             } catch IntelligenceError.responseTooLarge where attempt == 1 {
                 logger.notice(
                     "request=\(request.id.uuidString, privacy: .public) answerRejected=responseTooLarge attempt=1"
@@ -226,29 +226,14 @@ extension IntelligenceModel {
                 )
                 continue
             }
-            guard
-                let issue = ModelAnswer.Issue.check(
-                    generated.prose, source: input.source, instruction: input.instruction)
-            else { break }
+            guard let issue = reply.issue(answering: input.instruction, in: input.source) else { break }
             logger.notice(
                 "request=\(request.id.uuidString, privacy: .public) answerRejected=\(issue.rawValue, privacy: .public) attempt=\(attempt)"
             )
             if attempt == 2 { throw IntelligenceError.invalidAnswer(issue) }
         }
         try Task.checkCancellation()
-        let prose: [AnswerPart] =
-            generated.prose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? [] : [.prose(generated.prose)]
-        guard !prose.isEmpty || !generated.quotes.isEmpty else { throw IntelligenceError.emptyAnswer }
-        let bodyStart = MarkdownDocument(request.snapshot.source).contentStart
-        return try prose
-            + generated.quotes.map { quote in
-                let ranges = request.snapshot.source.exactRanges(of: quote).filter {
-                    $0.location >= bodyStart
-                }
-                guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
-                return .quotation(quote, ranges: ranges)
-            }
+        return try Answer(reply, in: request.snapshot)
     }
 
     private func combine(

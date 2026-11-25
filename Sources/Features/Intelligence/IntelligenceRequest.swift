@@ -51,7 +51,7 @@ package enum IntelligenceError: LocalizedError, Sendable, Equatable {
     case insufficientContext
     case invalidResponse
     case emptyAnswer
-    case invalidAnswer(ModelAnswer.Issue)
+    case invalidAnswer(Answer.Issue)
     case invalidEdit
     case unsafeEdit
     case responseTooLarge
@@ -121,10 +121,4 @@ package enum IntelligenceError: LocalizedError, Sendable, Equatable {
                 localized: "Apple Intelligence took too long to respond. Try again.", bundle: .module)
         }
     }
-}
-
-/// An answer's prose, or a quotation verified at its ranges in the note.
-package enum AnswerPart: Sendable, Equatable {
-    case prose(String)
-    case quotation(String, ranges: [NSRange])
 }
