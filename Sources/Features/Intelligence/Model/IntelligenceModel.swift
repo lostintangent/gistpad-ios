@@ -3,7 +3,8 @@ import Foundation
 package protocol IntelligenceModel {
     /// Why the model can't run right now, or nil when it can. Views that read it stay current.
     var unavailableReason: String? { get }
-    func modelInfo() async throws -> ModelInfo
+    /// The tokens one session holds, its instructions, prompt and response together.
+    var contextSize: Int { get }
     func tokenCount(for pass: ModelPass) async throws -> Int
     /// Edit's operations, or Review's suggestions as replacements.
     func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
@@ -13,13 +14,12 @@ package protocol IntelligenceModel {
     ) async throws -> ModelAnswer
 }
 
-package struct ModelInfo: Sendable {
-    package let variant: String
-    package let contextSize: Int
-}
-
 package struct ModelPass: Sendable {
     enum Purpose: String { case answer, extract, edit, review }
+    // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer
+    // runs to this limit and is retried once. Remove the retry and raise the limit when it has one.
+    /// Real answers use under 120 tokens.
+    static let answerTokens = 384
     let purpose: Purpose
     package let instruction: String
     package let source: String

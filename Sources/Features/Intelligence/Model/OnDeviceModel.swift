@@ -25,10 +25,10 @@ package final class OnDeviceModel: IntelligenceModel {
         }
     }
 
-    package func modelInfo() async throws -> ModelInfo {
-        if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
-        return ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
-    }
+    package var contextSize: Int { model.contextSize }
+
+    /// The model's name, for the eval's report.
+    package var variant: String { model.variant.displayName }
 
     /// Everything a session reads before it responds, as its usage reports it.
     package func tokenCount(for pass: ModelPass) async throws -> Int {

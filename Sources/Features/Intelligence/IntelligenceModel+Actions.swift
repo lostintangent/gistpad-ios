@@ -4,36 +4,17 @@ import OSLog
 
 let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
-package final class IntelligenceEngine {
-    let backend: any IntelligenceModel
-    // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer
-    // runs to this limit and is retried once. Remove the retry and raise the limit when it has one.
-    /// Real answers use under 120 tokens.
-    private let answerTokens = 384
-
-    /// Where a long request is, for the sheet's progress label.
-    package enum Progress: Sendable {
-        case reading(Int, of: Int)
-        case editing(Int, of: Int)
-        case reviewing(Int, of: Int)
-        case combining(Int, of: Int)
-        case answering
-    }
-
-    package init(backend: any IntelligenceModel) {
-        self.backend = backend
-    }
-
+extension IntelligenceModel {
     package func edit(
         _ request: IntelligenceRequest,
-        progress: @MainActor (Progress) -> Void = { _ in }
+        progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in }
     ) async throws -> Proposal {
         try await generate(request, purpose: .edit, progress: progress)
     }
 
     package func review(
         _ request: IntelligenceRequest,
-        progress: @MainActor (Progress) -> Void = { _ in }
+        progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in }
     ) async throws -> Proposal {
         try await generate(request, purpose: .review, progress: progress)
     }
@@ -41,14 +22,14 @@ package final class IntelligenceEngine {
     /// Review starts chunked; Edit starts with the whole body and splits only on context failure.
     private func generate(
         _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
-        progress: @MainActor (Progress) -> Void
+        progress: @MainActor (IntelligenceRequest.Progress) -> Void
     ) async throws -> Proposal {
         try Task.checkCancellation()
-        let model = try await backend.modelInfo()
+        if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
         let chunks =
             purpose == .edit
             ? [body(of: request)]
-            : try await split(body(of: request), request: request, purpose: purpose, model: model)
+            : try await split(body(of: request), request: request, purpose: purpose)
         var candidates: [(Proposal.Change, NSRange)] = []
         var pending = Array(chunks.reversed())
         var completed = 0
@@ -58,8 +39,8 @@ package final class IntelligenceEngine {
             progress(purpose == .edit ? .editing(current, of: total) : .reviewing(current, of: total))
             let chunkSource = text(chunk, of: request)
             do {
-                let input = pass(request, purpose: purpose, source: chunkSource, model: model, scope: chunk)
-                let operations = try await backend.editOperations(for: input)
+                let input = pass(request, purpose: purpose, source: chunkSource, scope: chunk)
+                let operations = try await editOperations(for: input)
                 try Task.checkCancellation()
                 for operation in operations {
                     switch operation {
@@ -169,7 +150,7 @@ package final class IntelligenceEngine {
                 IntelligenceError.insufficientContext
             {
                 let smaller = try await split(
-                    chunk, request: request, purpose: purpose, model: model, force: true)
+                    chunk, request: request, purpose: purpose, force: true)
                 pending.append(contentsOf: smaller.reversed())
             }
         }
@@ -184,32 +165,32 @@ package final class IntelligenceEngine {
 
     package func ask(
         _ request: IntelligenceRequest,
-        progress: @MainActor (Progress) -> Void = { _ in },
+        progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in },
         onPartialAnswer: @MainActor (String) -> Void = { _ in }
     ) async throws -> [AnswerPart] {
         try Task.checkCancellation()
-        let model = try await backend.modelInfo()
+        if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
         logger.notice(
-            "request=\(request.id.uuidString, privacy: .public) action=ask model=\(model.variant, privacy: .public) context=\(model.contextSize)"
+            "request=\(request.id.uuidString, privacy: .public) action=ask context=\(contextSize)"
         )
         let body = body(of: request)
-        let whole = pass(request, purpose: .answer, source: text(body, of: request), model: model)
+        let whole = pass(request, purpose: .answer, source: text(body, of: request))
         let input: ModelPass
-        let wholeFits = try await fits(whole, model: model)
+        let wholeFits = try await fits(whole)
         logger.notice(
             "request=\(request.id.uuidString, privacy: .public) action=ask path=\(wholeFits ? "whole" : "extract", privacy: .public) bodyUTF16=\(body.length) frontMatterUTF16=\(body.location)"
         )
         if wholeFits {
             input = whole
         } else {
-            let chunks = try await split(body, request: request, purpose: .extract, model: model)
+            let chunks = try await split(body, request: request, purpose: .extract)
             var evidence: [String] = []
             for (index, chunk) in chunks.enumerated() {
                 try Task.checkCancellation()
                 progress(.reading(index + 1, of: chunks.count))
                 let source = text(chunk, of: request)
-                let excerpts = try await backend.excerpts(
-                    for: pass(request, purpose: .extract, source: source, model: model))
+                let excerpts = try await self.excerpts(
+                    for: pass(request, purpose: .extract, source: source))
                 logger.notice(
                     "request=\(request.id.uuidString, privacy: .public) action=ask chunk=\(index + 1)/\(chunks.count) range=\(chunk.location):\(chunk.length) excerpts=\(excerpts.count)"
                 )
@@ -225,7 +206,7 @@ package final class IntelligenceEngine {
                 "request=\(request.id.uuidString, privacy: .public) action=ask selectedExcerpts=\(evidence.count)"
             )
             guard !evidence.isEmpty else { throw IntelligenceError.noEvidence }
-            input = try await combine(evidence, request: request, model: model, progress: progress)
+            input = try await combine(evidence, request: request, progress: progress)
         }
         progress(.answering)
         var generated = ModelAnswer(prose: "")
@@ -233,7 +214,7 @@ package final class IntelligenceEngine {
             try Task.checkCancellation()
             onPartialAnswer("")
             do {
-                generated = try await backend.streamAnswer(for: input, onUpdate: onPartialAnswer)
+                generated = try await streamAnswer(for: input, onUpdate: onPartialAnswer)
             } catch IntelligenceError.responseTooLarge where attempt == 1 {
                 logger.notice(
                     "request=\(request.id.uuidString, privacy: .public) answerRejected=responseTooLarge attempt=1"
@@ -271,23 +252,23 @@ package final class IntelligenceEngine {
     }
 
     private func combine(
-        _ initial: [String], request: IntelligenceRequest, model: ModelInfo,
-        progress: @MainActor (Progress) -> Void
+        _ initial: [String], request: IntelligenceRequest,
+        progress: @MainActor (IntelligenceRequest.Progress) -> Void
     ) async throws -> ModelPass {
         var evidence = initial
         for _ in 0..<8 {
             let source = evidence.joined(separator: "\n\n")
             let answer = pass(
-                request, purpose: .answer, source: source, model: model, evidenceBlocks: evidence)
-            if try await fits(answer, model: model) { return answer }
+                request, purpose: .answer, source: source, evidenceBlocks: evidence)
+            if try await fits(answer) { return answer }
             var batches: [[String]] = []
             var batch: [String] = []
             for excerpt in evidence {
                 let proposed = batch + [excerpt]
                 let probe = pass(
-                    request, purpose: .extract, source: proposed.joined(separator: "\n\n"), model: model,
+                    request, purpose: .extract, source: proposed.joined(separator: "\n\n"),
                     evidenceBlocks: proposed)
-                if try await fits(probe, model: model) {
+                if try await fits(probe) {
                     batch = proposed
                 } else {
                     if !batch.isEmpty { batches.append(batch) }
@@ -298,7 +279,7 @@ package final class IntelligenceEngine {
                     let extraction = IntelligenceRequest(
                         snapshot: snapshot, instruction: request.instruction, id: request.id)
                     let parts = try await split(
-                        body(of: extraction), request: extraction, purpose: .extract, model: model)
+                        body(of: extraction), request: extraction, purpose: .extract)
                     batches.append(contentsOf: parts.map { [text($0, of: extraction)] })
                 }
             }
@@ -307,9 +288,9 @@ package final class IntelligenceEngine {
             for (index, batch) in batches.enumerated() {
                 try Task.checkCancellation()
                 progress(.combining(index + 1, of: batches.count))
-                let excerpts = try await backend.excerpts(
+                let excerpts = try await self.excerpts(
                     for: pass(
-                        request, purpose: .extract, source: batch.joined(separator: "\n\n"), model: model,
+                        request, purpose: .extract, source: batch.joined(separator: "\n\n"),
                         evidenceBlocks: batch))
                 for excerpt in excerpts {
                     guard evidence.contains(where: { !$0.exactRanges(of: excerpt).isEmpty }) else {
@@ -341,13 +322,13 @@ package final class IntelligenceEngine {
 
     private func split(
         _ chunk: NSRange, request: IntelligenceRequest, purpose: ModelPass.Purpose,
-        model: ModelInfo, force: Bool = false
+        force: Bool = false
     ) async throws -> [NSRange] {
         try Task.checkCancellation()
         let source = text(chunk, of: request)
         if !force,
             try await fits(
-                pass(request, purpose: purpose, source: source, model: model, scope: chunk), model: model)
+                pass(request, purpose: purpose, source: source, scope: chunk))
         {
             return [chunk]
         }
@@ -384,30 +365,30 @@ package final class IntelligenceEngine {
         }
         let left = NSRange(location: chunk.location, length: offset)
         let right = NSRange(location: NSMaxRange(left), length: chunk.length - offset)
-        let first = try await split(left, request: request, purpose: purpose, model: model)
-        let second = try await split(right, request: request, purpose: purpose, model: model)
+        let first = try await split(left, request: request, purpose: purpose)
+        let second = try await split(right, request: request, purpose: purpose)
         return first + second
     }
 
-    private func fits(_ pass: ModelPass, model: ModelInfo) async throws -> Bool {
-        let count = try await backend.tokenCount(for: pass)
-        let fits = count <= model.contextSize - pass.responseTokens
+    private func fits(_ pass: ModelPass) async throws -> Bool {
+        let count = try await tokenCount(for: pass)
+        let fits = count <= contextSize - pass.responseTokens
         logger.notice(
-            "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize) fits=\(fits)"
+            "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(contextSize) fits=\(fits)"
         )
         return fits
     }
 
     private func pass(
         _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
-        source: String, model: ModelInfo, scope: NSRange? = nil,
+        source: String, scope: NSRange? = nil,
         evidenceBlocks: [String]? = nil
     ) -> ModelPass {
         let bodyLength =
             request.snapshot.source.utf16.count - MarkdownDocument(request.snapshot.source).contentStart
         return ModelPass(
             purpose: purpose, instruction: request.instruction, source: source,
-            responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),
+            responseTokens: min(purpose == .answer ? ModelPass.answerTokens : 1_536, contextSize / 3),
             requestID: request.id,
             tasks: purpose == .edit
                 ? request.snapshot.tasks.filter { task in

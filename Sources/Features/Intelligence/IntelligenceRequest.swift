@@ -30,6 +30,15 @@ package struct IntelligenceRequest: Sendable {
     package let snapshot: FileSnapshot
     let instruction: String
 
+    /// Where a long request is, for the sheet's progress label.
+    package enum Progress: Sendable {
+        case reading(Int, of: Int)
+        case editing(Int, of: Int)
+        case reviewing(Int, of: Int)
+        case combining(Int, of: Int)
+        case answering
+    }
+
     package init(snapshot: FileSnapshot, instruction: String = "", id: UUID = UUID()) {
         self.id = id
         self.snapshot = snapshot

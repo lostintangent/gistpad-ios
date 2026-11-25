@@ -51,12 +51,12 @@ struct EditTests {
         fixture.changes = { _ in [.insertTask(listID: 1, text: "Next")] }
         let unterminated = request("# Today\n\n- [ ] First", "Add Next")
         #expect(
-            try await IntelligenceEngine(backend: fixture).edit(unterminated)
+            try await fixture.edit(unterminated)
                 .application(to: unterminated.snapshot).source == "# Today\n\n- [ ] First\n- [ ] Next")
         fixture.changes = { _ in [.insertTask(listID: 0, text: "First")] }
         let blank = request("", "Add First")
         #expect(
-            try await IntelligenceEngine(backend: fixture).edit(blank)
+            try await fixture.edit(blank)
                 .application(to: blank.snapshot).source == "- [ ] First\n")
     }
 
@@ -81,7 +81,7 @@ struct EditTests {
             [.replace(change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))]
         }
         let fix = request(prose, "Fix bad")
-        let fixed = try await IntelligenceEngine(backend: editor).edit(fix)
+        let fixed = try await editor.edit(fix)
         #expect(editor.passes.count > 1)
         #expect(editor.passes.first?.source.utf8.elementsEqual(prose.utf8) == true)
         #expect(editor.passes.dropFirst().map(\.source).joined().utf8.elementsEqual(prose.utf8))
@@ -95,7 +95,7 @@ struct EditTests {
         checker.nextFailure = IntelligenceError.insufficientContext
         checker.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
         let all = request(list, "Check off everything")
-        let checked = try await IntelligenceEngine(backend: checker).edit(all)
+        let checked = try await checker.edit(all)
         #expect(checker.passes.count > 1)
         #expect(checker.passes.dropFirst().flatMap(\.tasks).map(\.id) == Array(1...80))
         #expect(
@@ -272,7 +272,7 @@ struct EditTests {
                 .rewriteRegion(destination.range, revised: "- River Engine\n- Paper Observatory"),
             ]
         }
-        let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
+        let proposal = try await fixture.edit(input)
         #expect(fixture.passes.map(\.source) == [body])
         #expect(proposal.changes.count == 2)
         #expect(proposal.omittedCount == 0)
@@ -287,7 +287,7 @@ struct EditTests {
                     heading.range, revised: "## Notes\n\nA new introduction for the section.")
             ]
         }
-        let inserted = try await IntelligenceEngine(backend: fixture).edit(input)
+        let inserted = try await fixture.edit(input)
         #expect(
             try inserted.application(to: input.snapshot).source
                 == prefix + body.replacingOccurrences(
@@ -301,7 +301,7 @@ struct EditTests {
         fixture.changes = { _ in
             [.replaceRegion(target, change("Keep this.", "Change this."))]
         }
-        let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
+        let proposal = try await fixture.edit(input)
         #expect(proposal.omittedCount == 0)
         #expect(
             try proposal.application(to: input.snapshot).source
@@ -311,7 +311,7 @@ struct EditTests {
             [.replaceRegion(target, change("Other text.", "Change this."))]
         }
         await #expect(throws: IntelligenceError.invalidResponse) {
-            try await IntelligenceEngine(backend: fixture).edit(input)
+            try await fixture.edit(input)
         }
     }
 
@@ -324,16 +324,15 @@ struct EditTests {
         let input = request(source, "Add a household task")
         #expect(input.snapshot.tasks.map(\.listID) == [1, 2, 2])
         let fixture = FixtureLanguageModel()
-        let engine = IntelligenceEngine(backend: fixture)
         fixture.changes = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
         let recycle = "- [ ] Recycle" + newline
         #expect(
-            try await engine.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
+            try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: recycle + "- [ ] Clean the kitchen" + newline)
                     .utf8))
         fixture.changes = { _ in [.deleteTasks(ids: [3])] }
         #expect(
-            try await engine.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
+            try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: "").utf8))
         for operation in [
             ModelEdit.insertTask(listID: 99, text: "Next"),
@@ -341,18 +340,17 @@ struct EditTests {
         ] {
             fixture.changes = { _ in [operation] }
             await #expect(throws: IntelligenceError.invalidEdit) {
-                try await engine.edit(input)
+                try await fixture.edit(input)
             }
         }
     }
 
     @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
         let fixture = FixtureLanguageModel()
-        let engine = IntelligenceEngine(backend: fixture)
         fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
         let daily = request("## 📆 2026-10-24\n\n- [ ]", "mark everything complete")
         #expect(
-            try await engine.edit(daily).application(to: daily.snapshot).source
+            try await fixture.edit(daily).application(to: daily.snapshot).source
                 == "## 📆 2026-10-24\n\n- [x]")
         let protected =
             "---\r\nexample: '- [ ] protected'\r\n---\r\n# Today\r\n\r\n- [ ] Read café\r\n"
@@ -361,7 +359,7 @@ struct EditTests {
         let everything = request(protected, "すべてのタスクを完了にして")
         #expect(everything.snapshot.tasks.map(\.isComplete) == [false, true, false, false])
         #expect(
-            try await engine.edit(everything).application(to: everything.snapshot).source
+            try await fixture.edit(everything).application(to: everything.snapshot).source
                 .utf8.elementsEqual(
                     protected.replacingOccurrences(of: "- [ ] Read", with: "- [x] Read")
                         .replacingOccurrences(of: "> - [ ] A", with: "> - [x] A")
@@ -371,17 +369,17 @@ struct EditTests {
         fixture.changes = { _ in [.setTaskStates(ids: [1, 2], isComplete: true)] }
         let subset = request(source, "mark the first two done")
         #expect(
-            try await engine.edit(subset).application(to: subset.snapshot).source
+            try await fixture.edit(subset).application(to: subset.snapshot).source
                 == source.replacingOccurrences(of: "[ ] Read", with: "[x] Read"))
         fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: false)] }
         let uncheck = request(source, "uncheck all")
         #expect(
-            try await engine.edit(uncheck).application(to: uncheck.snapshot).source
+            try await fixture.edit(uncheck).application(to: uncheck.snapshot).source
                 == source.replacingOccurrences(of: "[X]", with: "[ ]"))
         for ids in [[99], [1, 1], []] {
             fixture.changes = { _ in [.setTaskStates(ids: ids, isComplete: true)] }
             await #expect(throws: IntelligenceError.invalidResponse) {
-                try await engine.edit(request(source, "Complete it"))
+                try await fixture.edit(request(source, "Complete it"))
             }
         }
     }
@@ -437,7 +435,7 @@ struct EditTests {
             let fixture = FixtureLanguageModel()
             fixture.changes = rewrite(revision)
             let input = request(source, "Edit")
-            return try await IntelligenceEngine(backend: fixture).edit(input)
+            return try await fixture.edit(input)
                 .application(to: input.snapshot).source.replacingOccurrences(of: newline, with: "\n")
         }
         let daily = "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n"
@@ -491,7 +489,7 @@ struct EditTests {
         func reasons(_ source: String, _ revision: String) async throws -> [String] {
             let fixture = FixtureLanguageModel()
             fixture.changes = rewrite(revision)
-            return try await IntelligenceEngine(backend: fixture).edit(request(source, "Edit"))
+            return try await fixture.edit(request(source, "Edit"))
                 .changes.map(\.reason)
         }
         #expect(try await reasons("A\n\nB\n\nC\n\nD", "A2\n\nB\n\nC\n\nD2") == ["", ""])
@@ -501,7 +499,7 @@ struct EditTests {
         let fixture = FixtureLanguageModel()
         fixture.changes = rewrite("# Today")
         let dated = request("---\ndate: 2025-01-01\n---\n# Note\n", "Rename it Today")
-        let proposal = try await IntelligenceEngine(backend: fixture).edit(dated)
+        let proposal = try await fixture.edit(dated)
         #expect(fixture.passes.map(\.source) == ["# Note\n"])
         #expect(fixture.passes.map(\.isPart) == [false])
         #expect(
@@ -511,7 +509,7 @@ struct EditTests {
         let failing = FixtureLanguageModel()
         failing.failure = IntelligenceError.responseTooLarge
         await #expect(throws: IntelligenceError.responseTooLarge) {
-            try await IntelligenceEngine(backend: failing).edit(request("A\n\nB", "Edit"))
+            try await failing.edit(request("A\n\nB", "Edit"))
         }
         #expect(failing.passes.count == 1)
     }

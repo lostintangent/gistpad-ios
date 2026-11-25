@@ -28,7 +28,7 @@ struct AnswerIssueTests {
         let fixture = FixtureLanguageModel()
         fixture.answer = ModelAnswer(prose: prose)
         await #expect(throws: IntelligenceError.invalidAnswer(issue)) {
-            try await IntelligenceEngine(backend: fixture).ask(
+            try await fixture.ask(
                 request(source, "What do I like?"))
         }
     }
@@ -37,7 +37,7 @@ struct AnswerIssueTests {
         let fixture = FixtureLanguageModel()
         fixture.failure = IntelligenceError.responseTooLarge
         await #expect(throws: IntelligenceError.responseTooLarge) {
-            try await IntelligenceEngine(backend: fixture).ask(
+            try await fixture.ask(
                 request(source, "What do I like?"))
         }
         #expect(fixture.passes.map(\.purpose) == [.answer, .answer])

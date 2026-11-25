@@ -67,8 +67,7 @@ enum Evaluator {
                 }
                 let snapshot = snapshot(item.source)
                 let request = IntelligenceRequest(snapshot: snapshot, instruction: item.prompt)
-                let backend = RecordingModel()
-                let engine = IntelligenceEngine(backend: backend)
+                let model = RecordingModel()
                 var answerSeconds: Double?
                 var preparationSeconds: Double?
                 var firstVisibleSeconds: Double?
@@ -82,12 +81,12 @@ enum Evaluator {
                         answerCompletionSeconds: answerSeconds,
                         answerPreparationSeconds: preparationSeconds,
                         firstVisibleSeconds: firstVisibleSeconds,
-                        qualityRejectionCount: backend.rejectedAnswers.count,
-                        qualityRetryCount: max(0, backend.answerCalls - 1),
+                        qualityRejectionCount: model.rejectedAnswers.count,
+                        qualityRetryCount: max(0, model.answerCalls - 1),
                         errorCode: errorCode, errorType: errorType, answer: answer, proposedSource: proposed,
-                        rejectedAnswers: backend.rejectedAnswers,
-                        editOperations: backend.operations,
-                        inputTokens: backend.inputTokens,
+                        rejectedAnswers: model.rejectedAnswers,
+                        editOperations: model.operations,
+                        inputTokens: model.inputTokens,
                         modelGrade: modelGrade, modelGradeError: modelGradeError)
                 }
                 let result: EvalResult
@@ -99,7 +98,7 @@ enum Evaluator {
                     var expectationFailure: String?
                     let passed: Bool
                     if action == .ask {
-                        let response = try await engine.ask(
+                        let response = try await model.ask(
                             request,
                             progress: { progress in
                                 if case .answering = progress, preparationSeconds == nil {
@@ -131,7 +130,7 @@ enum Evaluator {
                     } else {
                         let proposal =
                             action == .review
-                            ? try await engine.review(request) : try await engine.edit(request)
+                            ? try await model.review(request) : try await model.edit(request)
                         answerSeconds = elapsed()
                         if let issues = item.reviewIssues {
                             // A review with nothing to apply is an answer, and the only right one for a clean note.
@@ -396,7 +395,7 @@ private struct FavoriteGrade {
     var passes: Bool
 }
 
-/// Counts answer generations and records the prose the engine's quality gate rejects and the
+/// Counts answer generations and records the prose Ask's quality gate rejects and the
 /// model's raw edit operations, so a failing case shows what the model actually proposed.
 @MainActor
 final class RecordingModel: IntelligenceModel {
@@ -407,7 +406,7 @@ final class RecordingModel: IntelligenceModel {
     private(set) var operations: [String] = []
 
     var unavailableReason: String? { model.unavailableReason }
-    func modelInfo() async throws -> ModelInfo { try await model.modelInfo() }
+    var contextSize: Int { model.contextSize }
     func tokenCount(for pass: ModelPass) async throws -> Int {
         let count = try await model.tokenCount(for: pass)
         inputTokens = max(inputTokens ?? 0, count)

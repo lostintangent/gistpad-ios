@@ -30,11 +30,6 @@ import Foundation
     var excerpts: (ModelPass) -> [String] = { _ in [] }
     private(set) var passes: [ModelPass] = []
 
-    func modelInfo() async throws -> ModelInfo {
-        if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
-        return ModelInfo(variant: "Fixture", contextSize: contextSize)
-    }
-
     func tokenCount(for pass: ModelPass) async throws -> Int {
         64 + pass.source.utf16.count + pass.instruction.utf16.count
     }

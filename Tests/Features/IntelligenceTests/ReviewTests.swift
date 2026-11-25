@@ -16,7 +16,7 @@ struct ReviewTests {
             ]
         }
         let snapshot = note("Clear text: first bad, second typo, third odd.")
-        let proposal = try await IntelligenceEngine(backend: fixture).review(
+        let proposal = try await fixture.review(
             IntelligenceRequest(snapshot: snapshot, instruction: ""))
         let changes = Dictionary(uniqueKeysWithValues: proposal.changes.map { ($0.quote, $0) })
         #expect(changes.count == 5)
@@ -49,12 +49,12 @@ struct ReviewTests {
 
         fixture.changes = { _ in [.replace(change("bad", nil))] }
         await #expect(throws: IntelligenceError.invalidResponse) {
-            try await IntelligenceEngine(backend: fixture).edit(
+            try await fixture.edit(
                 IntelligenceRequest(snapshot: snapshot, instruction: "Fix"))
         }
         fixture.changes = { _ in [.replace(change(snapshot.source, "Fix it"))] }
         await #expect(throws: IntelligenceError.unsafeEdit) {
-            try await IntelligenceEngine(backend: fixture).edit(
+            try await fixture.edit(
                 IntelligenceRequest(snapshot: snapshot, instruction: "Fix it"))
         }
     }
@@ -65,7 +65,7 @@ struct ReviewTests {
         let fixture = FixtureLanguageModel()
         fixture.changes = { _ in [.replace(change("shared 👩🏽‍💻", "retained"))] }
         let input = request(prefix + body)
-        let proposal = try await IntelligenceEngine(backend: fixture).review(input)
+        let proposal = try await fixture.review(input)
         #expect(fixture.passes.map(\.source) == [body])
         #expect(
             try proposal.application(to: input.snapshot).source

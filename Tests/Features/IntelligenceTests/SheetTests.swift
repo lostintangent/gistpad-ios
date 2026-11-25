@@ -13,7 +13,7 @@
             let editor = MarkdownEditor(text: source)
             var changes = 0
             editor.onEdit = { _, _ in changes += 1 }
-            let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
+            let state = IntelligenceState(editor: editor, model: FixtureLanguageModel())
             state.action = .edit
             state.editPrompt = "Fix the typo and the time"
             state.generate()
@@ -50,7 +50,7 @@
             case .error(let error): fixture.failure = error
             case .answer(let answer): fixture.answer = answer
             }
-            let state = IntelligenceState(editor: editor, backend: fixture)
+            let state = IntelligenceState(editor: editor, model: fixture)
             state.askPrompt = "When do I leave?"
             state.generate()
             await state.task?.value
@@ -68,7 +68,7 @@
             let editor = MarkdownEditor(text: source)
             let fixture = FixtureLanguageModel()
             fixture.isHeld = true
-            let state = IntelligenceState(editor: editor, backend: fixture)
+            let state = IntelligenceState(editor: editor, model: fixture)
             state.askPrompt = "When do I leave?"
             state.generate()
             for await count in Observations({ fixture.passes.count }) where count > 0 { break }
@@ -87,7 +87,7 @@
         @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
             let editor = MarkdownEditor(text: source)
             editor.isEditable = false
-            let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
+            let state = IntelligenceState(editor: editor, model: FixtureLanguageModel())
             state.askPrompt = "When do I leave?"
             #expect(state.canGenerate)
             state.action = .edit
@@ -112,7 +112,7 @@
             let fixture = FixtureLanguageModel()
             fixture.answer = ModelAnswer(
                 prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])
-            let state = IntelligenceState(editor: editor, backend: fixture)
+            let state = IntelligenceState(editor: editor, model: fixture)
             state.askPrompt = "What thought did I retain?"
             state.generate()
             await state.task?.value

@@ -7,24 +7,24 @@
     @Observable
     final class IntelligenceState {
         let editor: MarkdownEditor
+        private let model: any IntelligenceModel
         var action = IntelligenceAction.ask
         var askPrompt = ""
         var editPrompt = ""
         var isCancelling = false
         var errorMessage: String?
         var notice: String?
-        var progress: IntelligenceEngine.Progress?
+        var progress: IntelligenceRequest.Progress?
         var answerParts: [AnswerPart] = []
         var proposal: Proposal?
         var appliedEdit: Proposal?
         var appliedCount = 0
         private(set) var snapshot: FileSnapshot?
-        private let engine: IntelligenceEngine
         private(set) var task: Task<Void, Never>?
 
-        init(editor: MarkdownEditor, backend: any IntelligenceModel = OnDeviceModel()) {
+        init(editor: MarkdownEditor, model: any IntelligenceModel = OnDeviceModel()) {
             self.editor = editor
-            engine = IntelligenceEngine(backend: backend)
+            self.model = model
         }
 
         var prompt: String {
@@ -42,7 +42,7 @@
                 || !editor.document.text.utf8.elementsEqual(snapshot.source.utf8)
         }
 
-        var availabilityReason: String? { engine.backend.unavailableReason }
+        var availabilityReason: String? { model.unavailableReason }
 
         var canGenerate: Bool {
             availabilityReason == nil && !isRunning
@@ -91,15 +91,15 @@
                         snapshot: snapshot, instruction: instruction, id: requestID)
                     switch selectedAction {
                     case .ask:
-                        self.answerParts = try await self.engine.ask(
+                        self.answerParts = try await self.model.ask(
                             request, progress: { self.progress = $0 },
                             onPartialAnswer: { text in
                                 self.answerParts = text.isEmpty ? [] : [.prose(text)]
                             })
                     case .edit:
-                        self.proposal = try await self.engine.edit(request, progress: { self.progress = $0 })
+                        self.proposal = try await self.model.edit(request, progress: { self.progress = $0 })
                     case .review:
-                        self.proposal = try await self.engine.review(request, progress: { self.progress = $0 })
+                        self.proposal = try await self.model.review(request, progress: { self.progress = $0 })
                     }
                 } catch is CancellationError {
                     if selectedAction == .ask { self.answerParts = [] }

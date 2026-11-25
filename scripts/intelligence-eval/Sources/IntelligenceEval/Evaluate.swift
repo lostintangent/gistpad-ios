@@ -12,11 +12,12 @@ struct Evaluate {
             [EvalCase].self, from: Data(contentsOf: URL(filePath: CommandLine.arguments[1])))
         let output = URL(filePath: CommandLine.arguments[2])
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        let info = try await OnDeviceModel().modelInfo()
+        let model = OnDeviceModel()
+        if let reason = model.unavailableReason { throw IntelligenceError.unavailable(reason) }
         let heading =
-            "Model: \(info.variant)\nContext: \(info.contextSize)\nRepetitions: \(repeats)\n\n"
+            "Model: \(model.variant)\nContext: \(model.contextSize)\nRepetitions: \(repeats)\n\n"
         print(
-            "model=\(info.variant) context=\(info.contextSize) cases=\(cases.count) repeats=\(repeats)")
+            "model=\(model.variant) context=\(model.contextSize) cases=\(cases.count) repeats=\(repeats)")
         var finalResults: [EvalResult] = []
         try await Evaluator.run(cases: cases, repeats: repeats) { results in
             finalResults = results
