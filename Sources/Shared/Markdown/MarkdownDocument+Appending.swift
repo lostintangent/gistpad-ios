@@ -6,6 +6,11 @@ extension MarkdownDocument {
         appending(text.trimmingCharacters(in: .newlines), after: 2)
     }
 
+    /// Adds `text` on the lines after the note's last.
+    public func edit(appendingLines text: String) -> MarkdownEdit {
+        appending(text.trimmingCharacters(in: .newlines), after: 1)
+    }
+
     /// Adds an open task for each nonblank line of `text`, on the lines after the note's last.
     public func edit(appendingTasks text: String) -> MarkdownEdit {
         let tasks = text.split(whereSeparator: \.isNewline)

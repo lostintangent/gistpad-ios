@@ -177,10 +177,7 @@ final class GistPadActions: PlatformActions {
                 throw PlatformError.emptyNoteText
             }
             let draft = try await self.noteDraft(for: note)
-            let newline = draft.text.contains("\r\n") ? "\r\n" : "\n"
-            let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
-                + text + (text.last?.isNewline == true ? "" : newline)
-            try await self.append(addition, to: draft)
+            try await self.append(MarkdownDocument(draft.text).edit(appendingLines: text).replacement, to: draft)
             return note.withBody(of: self.visibleDocument(for: note, accountID: draft.accountID))
         }
     }

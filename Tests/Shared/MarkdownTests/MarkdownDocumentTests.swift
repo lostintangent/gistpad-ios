@@ -74,6 +74,12 @@ struct MarkdownDocumentTests {
         #expect(MarkdownDocument("- [ ] A\r\n").edit(appendingTasks: "B").result == "- [ ] A\r\n- [ ] B\r\n")
     }
 
+    @Test func appendingLinesTrimsTheTextAndKeepsACarriageReturnNotesBreak() {
+        #expect(MarkdownDocument("A").edit(appendingLines: "\nB\nC\n\n").result == "A\nB\nC\n")
+        #expect(MarkdownDocument("A\n").edit(appendingLines: "B").result == "A\nB\n")
+        #expect(MarkdownDocument("A\r").edit(appendingLines: "B").result == "A\rB\r")
+    }
+
     @Test func headingsWithInlineCodeStillMarkTheirEntireLine() {
         let source = "## Install `tool`\n```md\n## Hidden\n```\n"
         let headings = MarkdownDocument(source).blocks.filter { $0.kind == .heading }

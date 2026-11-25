@@ -47,7 +47,7 @@ Every change is a `MarkdownEdit` made by a method on the document it changes:
 | Lists | `edit(continuingListAt:with:)` starts the next item after a selection in a list item, numbered and boxed like it, and renumbers the siblings below. `edit(indenting:)` and `edit(outdenting:)` nest and lift items, renumbering both lists. |
 | Formatting | `edit(bolding:)`, `italicizing`, `coding`, `fencing`, `heading:over:`, `bulleting`, `numbering`, `checklisting`, `quoting` and `edit(linking:to:label:)`, which returns nil unless the destination is a complete web, email or phone link. Each toggles, so running it again removes it. |
 | Tasks | `edit(togglingTaskAt:)` checks or unchecks the box that starts exactly there, and returns nil anywhere else. |
-| Appending | `edit(appendingParagraph:)` adds a paragraph after a blank line, and `edit(appendingTasks:)` adds an open task for each line of its text, on the lines after the note's last. Both use the note's own line break. |
+| Appending | `edit(appendingParagraph:)` adds a paragraph after a blank line. `edit(appendingLines:)` adds its text on the lines after the note's last, and `edit(appendingTasks:)` adds an open task there for each line of its text. All three use the note's own line break. |
 | Any change | `edit(replacing:with:selection:)`, for text that comes from elsewhere, like GitHub, an image upload or Intelligence. |
 
 `MarkdownEditor.apply(_:)` lands an edit only while it shows the edit's document, and throws
