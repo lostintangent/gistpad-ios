@@ -26,7 +26,7 @@ struct LibrarySnapshotTests {
             accountID: account, newGistName: DailyNote.gistDescription, filename: DailyNote.filename(),
             text: "- [ ] Tomorrow"))
 
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: GistPadAccount(
                 id: account, github: FixtureServer.you,
                 preferences: GistPadPreferences(metadata: [
@@ -63,7 +63,7 @@ struct LibrarySnapshotTests {
             GistFileDraft(accountID: account, gistID: manga.id, filename: "Next.md"),
             text: "# Tomorrow\n", github: nil)
 
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
             cache: GistCache(accountID: account, owned: [manga], starred: []),
             drafts: [edited, unpublishedFile],
@@ -99,7 +99,7 @@ struct LibrarySnapshotTests {
             "daily", DailyNote.gistDescription, updated: "2026-02-01T09:00:00Z",
             files: ["2026-01-15.md": "January", "2026-02-01.md": "February"])
 
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
             cache: GistCache(accountID: account, owned: [daily], starred: []),
             drafts: [])
@@ -124,7 +124,7 @@ struct LibrarySnapshotTests {
             GistFileDraft(accountID: account, gistID: ideas.id, filename: "Next.md"),
             text: "# A new file", github: nil)
 
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
             cache: GistCache(accountID: account, owned: [newer, work, ideas], starred: []),
             drafts: [typed, sibling])

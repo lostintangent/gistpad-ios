@@ -82,7 +82,7 @@ final class PlatformBridge: PlatformActions {
     func refresh() async throws {
         let account = try await model.localAccount()
         try Task.checkCancellation()
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: account, cache: model.gistCache, drafts: model.drafts, visibleText: Self.noteBody)
         try snapshot.write()
         WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
@@ -106,7 +106,7 @@ final class PlatformBridge: PlatformActions {
 
     func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
-        let snapshot = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot(
             account: account, cache: model.gistCache, drafts: model.drafts,
             visibleText: Self.noteBody)
         return snapshot.gists.filter { identifiers.contains($0.id) }.map {

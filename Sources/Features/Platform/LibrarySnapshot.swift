@@ -9,22 +9,30 @@ public struct LibrarySnapshot: Codable, Sendable {
     /// The widget's recent gists: your own, newest edit anywhere in the gist first, without daily
     /// notes or archived gists.
     let recents: [GistEntity]
+}
 
-    public static func make(
+extension LibrarySnapshot {
+    /// The library as `account` has it on this iPhone, or a signed-out library without one.
+    public init(
         account: GistPadAccount?, cache: GistCache?, drafts: [GistFileDraft],
         visibleText: (String) -> String = { $0 }
-    ) -> Self {
-        guard let account else { return Self(accountID: nil, accentHex: nil, gists: [], recents: []) }
-        let preferences = account.preferences
+    ) {
+        accountID = account?.id
+        accentHex = account?.preferences.accentColor
+        guard let account else {
+            gists = []
+            recents = []
+            return
+        }
         func note(
             _ title: String, text: String?, updatedAt: Date, link: GistPadLink, in gist: Gist?
         ) -> GistEntity {
             GistEntity(
-                title: title, excerpt: excerpt(text.map(visibleText)),
-                tags: gist.map { preferences.tagNames(gistID: $0.id) } ?? [],
+                title: title, excerpt: Self.excerpt(text.map(visibleText)),
+                tags: gist.map { account.preferences.tagNames(gistID: $0.id) } ?? [],
                 updatedAt: updatedAt, link: link, accountID: account.id,
                 folderName: gist?.displayName,
-                pinned: gist.map { preferences.pinnedGists.contains($0.id) } ?? false)
+                pinned: gist.map { account.preferences.pinnedGists.contains($0.id) } ?? false)
         }
         var gists: [GistEntity] = []
         var recents: [GistEntity] = []
@@ -63,18 +71,15 @@ public struct LibrarySnapshot: Codable, Sendable {
             gists.append(unpublished)
             if draft.newGistName != DailyNote.gistDescription { recents.append(unpublished) }
         }
-        return Self(
-            accountID: account.id,
-            accentHex: preferences.accentColor,
-            gists: gists.sorted(by: newestFirst),
-            recents: Array(recents.sorted(by: newestFirst).prefix(3)))
+        self.gists = gists.sorted(by: Self.newestFirst)
+        self.recents = Array(recents.sorted(by: Self.newestFirst).prefix(3))
     }
 
     private static func newestFirst(_ a: GistEntity, _ b: GistEntity) -> Bool {
         a.updatedAt == b.updatedAt ? a.id < b.id : a.updatedAt > b.updatedAt
     }
 
-    public static func preview() -> Self {
+    public static var preview: Self {
         let recents = [
             ("Thanksgiving menu", -1.5), ("Widget ideas", -3.0), ("Reading list", -26.0)
         ].enumerated().map { index, gist in

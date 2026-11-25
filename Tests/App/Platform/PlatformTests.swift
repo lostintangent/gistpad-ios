@@ -280,6 +280,6 @@ private struct PlatformFixture {
     }
 
     func cleanUp() {
-        try? LibrarySnapshot.make(account: nil, cache: nil, drafts: []).write()
+        try? LibrarySnapshot(account: nil, cache: nil, drafts: []).write()
     }
 }

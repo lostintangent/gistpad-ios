@@ -37,7 +37,7 @@ struct LauncherWidget: Widget {
 
     struct Provider: TimelineProvider {
         func placeholder(in context: Context) -> Entry {
-            Entry(date: .now, snapshot: .preview(), state: .available)
+            Entry(date: .now, snapshot: .preview, state: .available)
         }
 
         func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
@@ -152,14 +152,14 @@ struct NewGistControl: ControlWidget {
 #Preview("Launcher", as: .systemSmall) {
     LauncherWidget()
 } timeline: {
-    LauncherWidget.Entry(date: .now, snapshot: .preview(), state: .available)
+    LauncherWidget.Entry(date: .now, snapshot: .preview, state: .available)
     LauncherWidget.Entry(date: .now, snapshot: nil, state: .signedOut)
 }
 
 #Preview("Launcher", as: .systemMedium) {
     LauncherWidget()
 } timeline: {
-    LauncherWidget.Entry(date: .now, snapshot: .preview(), state: .available)
+    LauncherWidget.Entry(date: .now, snapshot: .preview, state: .available)
     LauncherWidget.Entry(date: .now, snapshot: nil, state: .signedOut)
 }
 
