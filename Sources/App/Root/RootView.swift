@@ -438,12 +438,18 @@ struct RootView: View {
         else { return }
         FixtureLaunch.pendingSheet = nil
         let actions = gistActions(active)
-        switch fixtureSheet {
-        case .settings: sheet = .settings
-        case .tags: actions.tags?()
-        case .intelligence: actions.intelligence()
-        case .comments: actions.comments?()
-        case .today: break
+        // Platform gap: a sheet presented during the push brings back, for good, the title
+        // `.toolbar(removing: .title)` took away. No person can open one mid-push, so a fixture
+        // waits for the push to settle. Remove the wait when the removal survives a presentation.
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            switch fixtureSheet {
+            case .settings: sheet = .settings
+            case .tags: actions.tags?()
+            case .intelligence: actions.intelligence()
+            case .comments: actions.comments?()
+            case .today: break
+            }
         }
     }
     #endif
