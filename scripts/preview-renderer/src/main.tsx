@@ -20,7 +20,7 @@ window.gistpadPreview = Object.freeze({
     comments = new CommentHighlightController(request);
     root.render(
       <QueryClientProvider client={queryClient}>
-        <PreviewErrorBoundary key={request.fileID} request={request}>
+        <PreviewErrorBoundary request={request}>
           <Preview request={request} comments={comments} />
         </PreviewErrorBoundary>
       </QueryClientProvider>,

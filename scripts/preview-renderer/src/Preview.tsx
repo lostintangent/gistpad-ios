@@ -10,9 +10,9 @@ import emojiData from "@emoji-mart/data/sets/15/native.json";
 import remarkInlineSyntax from "../../../../gistpad.dev/src/features/markdown/remarkInlineSyntax";
 import rehypeToc from "@gistpad/rehype-toc";
 import Mermaid from "../../../../gistpad.dev/src/features/markdown/Mermaid";
-import { taskRangePlugins } from "./tasks";
+import { taskMarkerPlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
-import { identity, send, type RenderRequest, type TaskEdit } from "./protocol";
+import { identity, send, type RenderRequest } from "./protocol";
 import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
@@ -107,11 +107,8 @@ export class PreviewErrorBoundary extends Component<
 }
 
 export function Preview({ request, comments }: { request: RenderRequest; comments: CommentHighlightController }) {
-  const taskPlugins = useMemo(() => taskRangePlugins(request.markdown), [request]);
-  const contents = useRef({ fileID: request.fileID, open: false });
-  if (contents.current.fileID !== request.fileID) {
-    contents.current = { fileID: request.fileID, open: false };
-  }
+  const taskPlugins = useMemo(() => taskMarkerPlugins(request.markdown), [request]);
+  const contents = useRef({ open: false });
   const components = useMemo<Components>(() => {
     const link = (kind: "external" | "wikilink", target: string) => send({ ...identity(request), type: "link", kind, target });
     const jump = (target: string) => {
@@ -176,15 +173,8 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
       input({ node, checked, type }) {
         if (type !== "checkbox") return null;
         const location = node?.properties.dataTaskLocation;
-        const expectedMarker = node?.properties.dataTaskExpected;
-        const replacementMarker = node?.properties.dataTaskReplacement;
-        const addressable = typeof location === "number" &&
-          (expectedMarker === "[ ]" || expectedMarker === "[x]" || expectedMarker === "[X]") &&
-          (replacementMarker === "[ ]" || replacementMarker === "[x]");
-        const edit: TaskEdit | undefined = addressable
-          ? { location, length: 3, expectedMarker, replacementMarker } : undefined;
         return <TaskCheckbox checked={!!checked} label={String(node?.properties.dataTaskLabel ?? "Task")}
-          edit={edit} request={request} />;
+          location={typeof location === "number" ? location : undefined} request={request} />;
       },
       pre({ children, node, ...props }) {
         const isDiagram = node?.children.some((child) => child.type === "element" &&
@@ -237,15 +227,15 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
   </article>;
 }
 
-function TaskCheckbox({ checked, label, edit, request }: {
-  checked: boolean; label: string; edit?: TaskEdit; request: RenderRequest;
+function TaskCheckbox({ checked, label, location, request }: {
+  checked: boolean; label: string; location?: number; request: RenderRequest;
 }) {
-  const editable = request.allowsTaskEdits ? edit : undefined;
-  const action = !request.allowsTaskEdits ? "Read-only task" : edit === undefined ? "Unavailable task"
+  const editable = request.allowsTaskEdits ? location : undefined;
+  const action = !request.allowsTaskEdits ? "Read-only task" : location === undefined ? "Unavailable task"
     : checked ? "Mark incomplete" : "Mark complete";
-  return <label className="task-toggle"><input type="checkbox" checked={checked} disabled={!editable}
+  return <label className="task-toggle"><input type="checkbox" checked={checked} disabled={editable === undefined}
     aria-label={`${action}: ${label}`}
-    onChange={() => editable && send({ ...identity(request), type: "taskToggle", edit: editable })} /></label>;
+    onChange={() => editable !== undefined && send({ ...identity(request), type: "taskToggle", location: editable })} /></label>;
 }
 
 function PreviewImage({ src, alt }: { src?: string; alt: string }) {

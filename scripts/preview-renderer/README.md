@@ -27,7 +27,7 @@ HTML is sanitized before Contents, slugs and task annotation, so scripts, forms,
 
 The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
 
-Native accepts messages only from the bundle's main frame and drops any from an older generation. A task toggle carries the UTF-16 range of the parsed task's marker plus the expected and replacement markers, and native checks them against the current text before applying the edit. `allowsTaskEdits` travels with each render, so read-only checkboxes never emit edits. Links must be http, https or mailto.
+Each render carries a generation that every message repeats, and native accepts messages only from the bundle's main frame and the latest render. A task toggle names only the UTF-16 location of its marker, and the native document makes the edit, so a location that isn't a box is rejected. `allowsTaskEdits` travels with each render, so read-only checkboxes never emit edits. Links must be http, https or mailto.
 
 ## Comments
 

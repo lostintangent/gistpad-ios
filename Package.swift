@@ -42,7 +42,7 @@ let package = Package(
             name: "Platform", dependencies: ["Appearance", "Markdown", "Store"], path: "Sources/Features/Platform",
             exclude: ["README.md"]),
         .target(
-            name: "Preview", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Preview",
+            name: "Preview", dependencies: ["Appearance", "Comments", "Markdown"], path: "Sources/Features/Preview",
             resources: [.copy("Resources/Web"), .process("Resources/Localizable.xcstrings")],
             swiftSettings: mainActor),
 
@@ -70,7 +70,7 @@ let package = Package(
             name: "PlatformTests", dependencies: ["Platform", "Store"],
             path: "Tests/Features/PlatformTests"),
         .testTarget(
-            name: "PreviewTests", dependencies: ["Preview", "Appearance", "Comments"],
+            name: "PreviewTests", dependencies: ["Preview", "Appearance", "Comments", "Markdown"],
             path: "Tests/Features/PreviewTests", swiftSettings: mainActor),
 
         // The on-device Intelligence eval, which reaches the pipeline through `package` access.

@@ -1,13 +1,13 @@
 import Foundation
+import Markdown
 
 struct PreviewFile: Equatable, Sendable {
-    let text: String
-    let id: String
-    let generation: UInt64
+    let document: MarkdownDocument
     let allowsTaskEdits: Bool
 
-    var arguments: [String: Any] {
-        ["fileID": id, "generation": generation, "markdown": text, "allowsTaskEdits": allowsTaskEdits]
+    /// The page repeats the render's generation in every message it posts.
+    func arguments(generation: UInt64) -> [String: Any] {
+        ["generation": generation, "markdown": document.text, "allowsTaskEdits": allowsTaskEdits]
     }
 }
 
@@ -22,25 +22,19 @@ struct PreviewError: LocalizedError {
 }
 
 /// A message the page posts to the app.
-enum PreviewMessage: Equatable {
+enum PreviewMessage {
     case ready
     case rendered
-    case commentActivate(segment: Int, start: Int, end: Int)
+    case taskToggle(MarkdownEdit)
+    case openWikilink(String)
     case openURL(URL)
+    case commentActivate(segment: Int, start: Int, end: Int)
     case failure(String)
-    case event(PreviewEvent)
 
     private struct Envelope: Decodable {
-        struct Edit: Decodable {
-            let location: Int
-            let length: Int
-            let expectedMarker: String
-            let replacementMarker: String
-        }
         let type: String
-        let fileID: String?
         let generation: UInt64?
-        let edit: Edit?
+        let location: Int?
         let kind: String?
         let target: String?
         let message: String?
@@ -49,31 +43,28 @@ enum PreviewMessage: Equatable {
         let end: Int?
     }
 
-    /// Fails for a message from an older generation, and for a task toggle the file doesn't allow.
-    init?(_ body: Any, file: PreviewFile) throws {
+    /// Nil for a message from an earlier render.
+    init?(_ body: Any, file: PreviewFile, generation: UInt64) throws {
         guard JSONSerialization.isValidJSONObject(body) else { throw PreviewError.invalidMessage }
         let message = try JSONDecoder().decode(Envelope.self, from: JSONSerialization.data(withJSONObject: body))
         if message.type == "ready" {
             self = .ready
             return
         }
-        guard message.fileID == file.id, message.generation == file.generation else { return nil }
+        guard message.generation == generation else { return nil }
         switch message.type {
         case "taskToggle":
-            guard file.allowsTaskEdits else { return nil }
-            guard let edit = message.edit else { throw PreviewError.invalidMessage }
-            let range = NSRange(location: edit.location, length: edit.length)
-            guard file.isTaskToggle(range, from: edit.expectedMarker, to: edit.replacementMarker) else {
+            // The page is the untrusted side, so it only names a box, and the document makes the edit.
+            guard file.allowsTaskEdits, let location = message.location,
+                  let edit = file.document.edit(togglingTaskAt: location) else {
                 throw PreviewError.invalidMessage
             }
-            self = .event(.taskToggle(
-                range: range, expected: edit.expectedMarker, replacement: edit.replacementMarker,
-                generation: file.generation))
+            self = .taskToggle(edit)
         case "link":
             guard let target = message.target, !target.isEmpty else { throw PreviewError.invalidMessage }
             switch message.kind {
             case "wikilink":
-                self = .event(.openWikilink(target))
+                self = .openWikilink(target)
             case "external":
                 guard let url = URL(string: target),
                       let scheme = url.scheme?.lowercased(),
@@ -98,16 +89,5 @@ enum PreviewMessage: Equatable {
         default:
             throw PreviewError.invalidMessage
         }
-    }
-}
-
-private extension PreviewFile {
-    /// The web view is the untrusted side, so a toggle may only flip one task marker in the current text.
-    func isTaskToggle(_ range: NSRange, from expected: String, to replacement: String) -> Bool {
-        guard range.location >= 0, range.length == 3, range.location <= text.utf16.count - range.length,
-              let swiftRange = Range(range, in: text) else { return false }
-        return String(text[swiftRange]) == expected
-            && ["[ ]", "[x]", "[X]"].contains(expected)
-            && replacement == (expected == "[ ]" ? "[x]" : "[ ]")
     }
 }

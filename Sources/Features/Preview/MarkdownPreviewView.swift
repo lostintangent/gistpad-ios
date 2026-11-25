@@ -5,28 +5,30 @@ import OSLog
 import UniformTypeIdentifiers
 import Appearance
 import Comments
+import Markdown
 
+/// A rendered Markdown document. Give each file its own identity, so a new file starts at its top.
 public struct MarkdownPreviewView: View {
     private let file: PreviewFile
     private let comments: CommentHighlightConfiguration
     private let commentActions: CommentHighlightActions?
-    private let onEvent: @MainActor (PreviewEvent) -> Void
+    private let edit: (@MainActor (MarkdownEdit) -> Void)?
+    private let openWikilink: (@MainActor (String) -> Void)?
     @State private var failed = false
 
+    /// Tapping a task box makes its edit and hands it to `edit`. Without `edit`, the boxes are read-only.
     public init(
-        markdown: String,
-        fileID: String,
-        generation: UInt64,
-        allowsTaskEdits: Bool = true,
+        document: MarkdownDocument,
         comments: CommentHighlightConfiguration = .init(),
         commentActions: CommentHighlightActions? = nil,
-        onEvent: @escaping @MainActor (PreviewEvent) -> Void
+        edit: (@MainActor (MarkdownEdit) -> Void)? = nil,
+        openWikilink: (@MainActor (String) -> Void)? = nil
     ) {
-        self.file = PreviewFile(
-            text: markdown, id: fileID, generation: generation, allowsTaskEdits: allowsTaskEdits)
+        file = PreviewFile(document: document, allowsTaskEdits: edit != nil)
         self.comments = comments
         self.commentActions = commentActions
-        self.onEvent = onEvent
+        self.edit = edit
+        self.openWikilink = openWikilink
     }
 
     public var body: some View {
@@ -38,8 +40,8 @@ public struct MarkdownPreviewView: View {
             }
         } else {
             NativeMarkdownPreview(
-                file: file, comments: comments, commentActions: commentActions, onEvent: onEvent,
-                onFailure: { failed = true }
+                file: file, comments: comments, commentActions: commentActions, edit: edit,
+                openWikilink: openWikilink, onFailure: { failed = true }
             )
             // The page scrolls under the bars, and UIKit insets it by their height.
             .ignoresSafeArea(.container, edges: .vertical)
@@ -56,7 +58,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
     let comments: CommentHighlightConfiguration
     let commentActions: CommentHighlightActions?
-    let onEvent: @MainActor (PreviewEvent) -> Void
+    let edit: (@MainActor (MarkdownEdit) -> Void)?
+    let openWikilink: (@MainActor (String) -> Void)?
     let onFailure: @MainActor () -> Void
     @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -123,6 +126,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         fileprivate var appearance: PreviewAppearance?
         fileprivate let commentHighlights = PreviewCommentHighlights()
         private var lastSent: PreviewFile?
+        /// Counts renders. The page repeats the count in each message, so one from an earlier render drops.
+        private var generation: UInt64 = 0
         private var lastAppearance: PreviewAppearance?
         private var ready = false
 
@@ -165,7 +170,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             }
             guard lastSent != parent.file else { return }
             lastSent = parent.file
-            call("window.gistpadPreview.render(payload);", ["payload": parent.file.arguments])
+            generation += 1
+            call("window.gistpadPreview.render(payload);", ["payload": parent.file.arguments(generation: generation)])
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -176,12 +182,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 return
             }
             do {
-                switch try PreviewMessage(message.body, file: parent.file) {
+                switch try PreviewMessage(message.body, file: parent.file, generation: generation) {
                 case .ready:
                     ready = true
                     update()
-                case .event(let event):
-                    parent.onEvent(event)
+                case .taskToggle(let edit):
+                    parent.edit?(edit)
+                case .openWikilink(let name):
+                    parent.openWikilink?(name)
                 case .openURL(let url):
                     parent.openURL(url)
                 case .failure(let reason):
@@ -191,7 +199,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 case .rendered:
                     commentHighlights.rendered(parent.file)
                 case nil:
-                    Logger.preview.debug("Dropped a preview message for an older generation.")
+                    Logger.preview.debug("Dropped a preview message from an earlier render.")
                 }
             } catch {
                 Logger.preview.error("Ignored an invalid preview message: \(error.localizedDescription)")

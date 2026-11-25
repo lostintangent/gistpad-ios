@@ -6,7 +6,7 @@ import { CommentHighlightController, CommentText } from "../src/commentHighlight
 import type { RenderRequest } from "../src/protocol";
 
 const request: RenderRequest = {
-  fileID: "comments-fixture", generation: 1, markdown: "A native note", allowsTaskEdits: true,
+  generation: 1, markdown: "A native note", allowsTaskEdits: true,
 };
 
 describe("comment highlights", () => {

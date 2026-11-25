@@ -1,28 +1,20 @@
 export interface RenderRequest {
-  fileID: string;
   generation: number;
   markdown: string;
   allowsTaskEdits: boolean;
 }
 
-export type Identity = Pick<RenderRequest, "fileID" | "generation">;
+export type Identity = Pick<RenderRequest, "generation">;
 
 export function identity(request: RenderRequest): Identity {
-  return { fileID: request.fileID, generation: request.generation };
-}
-
-export interface TaskEdit {
-  location: number;
-  length: 3;
-  expectedMarker: "[ ]" | "[x]" | "[X]";
-  replacementMarker: "[ ]" | "[x]";
+  return { generation: request.generation };
 }
 
 export type PreviewMessage =
   | { type: "ready" }
   | (Identity &
       (
-        | { type: "taskToggle"; edit: TaskEdit }
+        | { type: "taskToggle"; location: number }
         | { type: "link"; kind: "external" | "wikilink"; target: string }
         | { type: "rendered" }
         | { type: "failure"; message: string }

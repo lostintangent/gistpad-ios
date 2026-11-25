@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import SwiftUI
 import Testing
 import UIKit
@@ -12,8 +13,9 @@ struct PreviewWebKitTests {
     func offlineRendering() async throws {
         let markdown = FixtureLibrary.allSyntax
             .replacingOccurrences(of: "![Remote image](https://example.com/gistpad-fixture.png)", with: "")
-        let readOnly = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: false)
-        let editable = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: true)
+        let document = MarkdownDocument(markdown)
+        let readOnly = PreviewFile(document: document, allowsTaskEdits: false)
+        let editable = PreviewFile(document: document, allowsTaskEdits: true)
         let receiver = MessageReceiver()
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -48,7 +50,7 @@ struct PreviewWebKitTests {
             receiver.bodies.removeAll()
             _ = try await webView.callAsyncJavaScript(
                 "window.gistpadPreview.render(payload);",
-                arguments: ["payload": file.arguments], in: nil, contentWorld: .page
+                arguments: ["payload": file.arguments(generation: 1)], in: nil, contentWorld: .page
             )
             await until { receiver.hasPosted("rendered") }
         }
@@ -75,18 +77,22 @@ struct PreviewWebKitTests {
         #expect(enabled == 7)
         _ = try await evaluate("document.querySelectorAll('input[type=checkbox]')[1].click();")
         let toggle = try #require(receiver.bodies.last { $0["type"] as? String == "taskToggle" })
-        guard case .event(.taskToggle(let range, _, let replacement, _)) = try PreviewMessage(toggle, file: editable) else {
-            Issue.record("Expected a validated source edit")
+        guard case .taskToggle(let edit)? = try PreviewMessage(toggle, file: editable, generation: 1) else {
+            Issue.record("Expected the document's edit")
             return
         }
-        #expect(range == (markdown as NSString).range(of: "[x]"))
-        #expect(replacement == "[ ]")
+        #expect(edit.range == (markdown as NSString).range(of: "[x]"))
+        #expect(edit.replacement == "[ ]")
 
         #expect(try await text(of: #"svg[id^="mermaid-"]"#, in: webView) != nil)
 
         _ = try await evaluate("document.querySelector('button.wikilink').click();")
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
-        #expect(try PreviewMessage(wikilink, file: editable) == .event(.openWikilink("Ideas")))
+        guard case .openWikilink(let name)? = try PreviewMessage(wikilink, file: editable, generation: 1) else {
+            Issue.record("Expected a wikilink to open")
+            return
+        }
+        #expect(name == "Ideas")
         #expect(receiver.bodies.filter { ["diagnostic", "failure"].contains($0["type"] as? String) }.isEmpty)
     }
 
@@ -100,7 +106,7 @@ struct PreviewWebKitTests {
                 + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
         }.joined(separator: "\n\n")
         let controller = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) { _ in })
+            rootView: MarkdownPreviewView(document: MarkdownDocument(markdown)))
         let container = UIViewController()
         container.addChild(controller)
         container.view.addSubview(controller.view)
@@ -208,7 +214,7 @@ struct PreviewWebKitTests {
         window.makeKeyAndVisible()
         defer { tearDown(window) }
         let preview = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: markdown, fileID: "first-frame", generation: 0) { _ in })
+            rootView: MarkdownPreviewView(document: MarkdownDocument(markdown)))
         preview.title = "Below the bar"
         navigation.pushViewController(preview, animated: animated)
 
@@ -245,7 +251,7 @@ struct PreviewWebKitTests {
         window.makeKeyAndVisible()
         defer { tearDown(window) }
         let preview = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: markdown, fileID: "contents", generation: 0) { _ in })
+            rootView: MarkdownPreviewView(document: MarkdownDocument(markdown)))
         preview.title = "Contents"
         navigation.pushViewController(preview, animated: false)
         navigation.view.layoutIfNeeded()
@@ -269,8 +275,7 @@ struct PreviewWebKitTests {
     @Test("A terminated web process renders the same document again")
     func aTerminatedWebProcessRendersAgain() async throws {
         let controller = UIHostingController(
-            rootView: MarkdownPreviewView(
-                markdown: "# Still here\n\nKeep this paragraph.", fileID: "blank-probe", generation: 1) { _ in })
+            rootView: MarkdownPreviewView(document: MarkdownDocument("# Still here\n\nKeep this paragraph.")))
         let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = controller
         window.makeKeyAndVisible()
@@ -290,7 +295,7 @@ struct PreviewWebKitTests {
     @Test("A page that fails gives way to Preview Unavailable")
     func aFailedPageGivesWay() async throws {
         let controller = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: "# Failing", fileID: "failure-probe", generation: 1) { _ in })
+            rootView: MarkdownPreviewView(document: MarkdownDocument("# Failing")))
         let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = controller
         window.makeKeyAndVisible()
@@ -303,7 +308,7 @@ struct PreviewWebKitTests {
         _ = try await webView.callAsyncJavaScript(
             """
             window.webkit.messageHandlers.gistpadPreview.postMessage(
-                { type: "failure", fileID: "failure-probe", generation: 1, message: "Probe" });
+                { type: "failure", generation: 1, message: "Probe" });
             """, arguments: [:], in: nil, contentWorld: .page)
         controller.view.layoutIfNeeded()
         #expect(findWebView(in: controller.view) == nil)
