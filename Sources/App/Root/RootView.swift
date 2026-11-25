@@ -16,7 +16,7 @@ struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var allowsSplit = false
     @State private var layout: LayoutPreferences
-    @State private var intelligence = IntelligencePresentation()
+    @State private var intelligence: IntelligenceTarget?
     @State private var comments: CommentsState
     @State private var images: ImageUpload
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -67,7 +67,7 @@ struct RootView: View {
                 if phase == .active { Task { await model.returnToApp() } }
             }
             .onChange(of: settledAccountID) {
-                intelligence.target = nil
+                intelligence = nil
             }
             // Reconnecting keeps Comments open, so its draft goes out once GitHub lets you back in.
             .onChange(of: model.account?.id) {
@@ -94,7 +94,7 @@ struct RootView: View {
                     ConflictReview(fileEditor: target.fileEditor, review: target.review)
                 }
             }
-            .intelligenceSheet(intelligence)
+            .intelligenceSheet($intelligence)
     }
 
     /// The library and the open file, preparing each file as it arrives and leaving it as it goes.
@@ -407,7 +407,11 @@ struct RootView: View {
     }
 
     private func presentIntelligence(_ fileEditor: GistFileEditor) {
-        intelligence.present(fileEditor, model: model) { layout.select(.edit) }
+        do {
+            intelligence = try IntelligenceTarget(fileEditor, model: model) { layout.select(.edit) }
+        } catch {
+            model.failure = Failure(error)
+        }
     }
 
     private func openToday() {
@@ -445,7 +449,7 @@ struct RootView: View {
     private func openPendingLink() async {
         guard let link = linkToOpen, let account = model.account else { return }
         sheet = nil
-        intelligence.target = nil
+        intelligence = nil
         model.failure = nil
         switch link {
         case .today:

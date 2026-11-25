@@ -1,5 +1,6 @@
 #if canImport(UIKit)
     @testable import Editor
+    import Observation
     import SwiftUI
     import Testing
     import UIKit
@@ -18,7 +19,7 @@
             let selection = (source as NSString).range(of: "Stop 60 ")
             var changes = 0
             session.onEdit = { _, _ in changes += 1 }
-            let presentation = IntelligencePresentation()
+            let presented = PresentedTarget()
             let scene = try #require(
                 UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
             let previous = scene.windows.first(where: \.isKeyWindow)
@@ -27,7 +28,7 @@
                 rootView: NavigationStack {
                     MarkdownEditorView(editor: session).navigationTitle("Saturday walk")
                 }
-                .intelligenceSheet(presentation))
+                .intelligenceSheet(Bindable(presented).target))
             window.rootViewController = host
             window.makeKeyAndVisible()
             defer {
@@ -56,14 +57,15 @@
             window.layoutIfNeeded()
             let offset = editor.contentOffset.y
             try #require(offset > 0)
-            presentation.present(
+            let target = IntelligenceTarget(
                 editor: session, title: "Saturday walk",
                 revealSource: { _ in Issue.record("Closing must not navigate to a passage.") })
-            try #require(presentation.target?.wasEditing == true)
+            try #require(target.wasEditing)
+            presented.target = target
             await settle()
             try #require(intelligencePrompt(presentedOver: host) != nil)
             #expect(!editor.isFirstResponder)
-            presentation.target = nil
+            presented.target = nil
             await settle()
             // The closing sheet hands focus back to the editor it came from.
             await until { session.isEditing }
@@ -143,6 +145,11 @@
             defer { center.removeObserver(token) }
             for await _ in closed {}
         }
+    }
+
+    /// The target RootView would hold.
+    @Observable final class PresentedTarget {
+        var target: IntelligenceTarget?
     }
 
     /// The sheet's prompt field, found as a view because SwiftUI only builds
