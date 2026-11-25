@@ -59,7 +59,7 @@ struct CommentsConversation: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .scrollEdgeEffectStyle(.soft, for: .all)
         .refreshable { await model.refresh() }
         .tint(.primary)
         .overlay { emptyState }
