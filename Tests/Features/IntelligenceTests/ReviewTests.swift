@@ -6,13 +6,13 @@ import Testing
 struct ReviewTests {
     @Test func applyingOneSuggestionAndDismissingAnotherLeavesTheRestExact() async throws {
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in
+        fixture.suggestions = { _ in
             [
-                .replace(change("bad", "much better")),
-                .replace(change("typo", "word")),
-                .replace(change("odd", "even")),
-                .replace(change("Clear", nil)),
-                .replace(change("text", "text")),
+                change("bad", "much better"),
+                change("typo", "word"),
+                change("odd", "even"),
+                change("Clear", nil),
+                change("text", "text"),
             ]
         }
         let snapshot = note("Clear text: first bad, second typo, third odd.")
@@ -47,12 +47,19 @@ struct ReviewTests {
             try rebased.remaining(on: rebasedSnapshot).application(to: rebasedSnapshot)
         }
 
-        fixture.changes = { _ in [.replace(change("bad", nil))] }
+        fixture.operations = { pass in
+            [.replaceRegion((pass.source as NSString).range(of: "bad"), change("bad", nil))]
+        }
         await #expect(throws: IntelligenceError.invalidResponse) {
             try await fixture.edit(
                 IntelligenceRequest(snapshot: snapshot, instruction: "Fix"))
         }
-        fixture.changes = { _ in [.replace(change(snapshot.source, "Fix it"))] }
+        fixture.operations = { pass in
+            [
+                .replaceRegion(
+                    NSRange(location: 0, length: pass.source.utf16.count), change(pass.source, "Fix it"))
+            ]
+        }
         await #expect(throws: IntelligenceError.unsafeEdit) {
             try await fixture.edit(
                 IntelligenceRequest(snapshot: snapshot, instruction: "Fix it"))
@@ -63,7 +70,7 @@ struct ReviewTests {
         let prefix = "---\r\nkey: shared 👩🏽‍💻\r\n---\r\n\r\n"
         let body = "# Content\r\n\r\nThe shared 👩🏽‍💻 detail is here.\r\n"
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in [.replace(change("shared 👩🏽‍💻", "retained"))] }
+        fixture.suggestions = { _ in [change("shared 👩🏽‍💻", "retained")] }
         let input = request(prefix + body)
         let proposal = try await fixture.review(input)
         #expect(fixture.passes.map(\.source) == [body])

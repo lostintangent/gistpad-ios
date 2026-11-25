@@ -48,12 +48,12 @@ struct EditTests {
                 .canApply)
 
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in [.insertTask(listID: 1, text: "Next")] }
+        fixture.operations = { _ in [.insertTask(listID: 1, text: "Next")] }
         let unterminated = request("# Today\n\n- [ ] First", "Add Next")
         #expect(
             try await fixture.edit(unterminated)
                 .application(to: unterminated.snapshot).source == "# Today\n\n- [ ] First\n- [ ] Next")
-        fixture.changes = { _ in [.insertTask(listID: 0, text: "First")] }
+        fixture.operations = { _ in [.insertTask(listID: 0, text: "First")] }
         let blank = request("", "Add First")
         #expect(
             try await fixture.edit(blank)
@@ -77,8 +77,12 @@ struct EditTests {
         let editor = FixtureLanguageModel()
         editor.contextSize = 1_536
         editor.nextFailure = IntelligenceError.insufficientContext
-        editor.changes = { pass in
-            [.replace(change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))]
+        editor.operations = { pass in
+            [
+                .replaceRegion(
+                    NSRange(location: 0, length: pass.source.utf16.count),
+                    change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))
+            ]
         }
         let fix = request(prose, "Fix bad")
         let fixed = try await editor.edit(fix)
@@ -93,7 +97,7 @@ struct EditTests {
         let checker = FixtureLanguageModel()
         checker.contextSize = 512
         checker.nextFailure = IntelligenceError.insufficientContext
-        checker.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
+        checker.operations = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
         let all = request(list, "Check off everything")
         let checked = try await checker.edit(all)
         #expect(checker.passes.count > 1)
@@ -260,7 +264,7 @@ struct EditTests {
         let body = "# Reading\r\n\r\n- Paper Observatory\r\n- River Engine\r\n\r\n## Notes\r\n\r\nKeep this.\r\n"
         let input = request(prefix + body, "Move Paper Observatory after River Engine")
         let fixture = FixtureLanguageModel()
-        fixture.changes = { pass in
+        fixture.operations = { pass in
             let blocks = EditBlock.indexed(in: pass.source)
             let source = blocks.first { $0.text == "- Paper Observatory" }!
             let destination = blocks.first { $0.text == "- River Engine" }!
@@ -280,7 +284,7 @@ struct EditTests {
             try proposal.application(to: input.snapshot).source
                 == prefix + "# Reading\r\n\r\n- River Engine\r\n- Paper Observatory\r\n\r\n## Notes\r\n\r\nKeep this.\r\n")
 
-        fixture.changes = { pass in
+        fixture.operations = { pass in
             let heading = EditBlock.indexed(in: pass.source).first { $0.text == "## Notes" }!
             return [
                 .rewriteRegion(
@@ -298,7 +302,7 @@ struct EditTests {
         let input = request("# First\n\nKeep this.\n\n# Second\n\nKeep this.\n", "Change the second note")
         let target = (input.snapshot.source as NSString).range(of: "Keep this.", options: .backwards)
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in
+        fixture.operations = { _ in
             [.replaceRegion(target, change("Keep this.", "Change this."))]
         }
         let proposal = try await fixture.edit(input)
@@ -307,7 +311,7 @@ struct EditTests {
             try proposal.application(to: input.snapshot).source
                 == "# First\n\nKeep this.\n\n# Second\n\nChange this.\n")
 
-        fixture.changes = { _ in
+        fixture.operations = { _ in
             [.replaceRegion(target, change("Other text.", "Change this."))]
         }
         await #expect(throws: IntelligenceError.invalidResponse) {
@@ -324,21 +328,21 @@ struct EditTests {
         let input = request(source, "Add a household task")
         #expect(input.snapshot.tasks.map(\.listID) == [1, 2, 2])
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
+        fixture.operations = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
         let recycle = "- [ ] Recycle" + newline
         #expect(
             try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: recycle + "- [ ] Clean the kitchen" + newline)
                     .utf8))
-        fixture.changes = { _ in [.deleteTasks(ids: [3])] }
+        fixture.operations = { _ in [.deleteTasks(ids: [3])] }
         #expect(
             try await fixture.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
                 source.replacingOccurrences(of: recycle, with: "").utf8))
         for operation in [
-            ModelEdit.insertTask(listID: 99, text: "Next"),
+            EditOperation.insertTask(listID: 99, text: "Next"),
             .insertTask(listID: 1, text: "Next\n- [ ] Injected"), .deleteTasks(ids: [99]),
         ] {
-            fixture.changes = { _ in [operation] }
+            fixture.operations = { _ in [operation] }
             await #expect(throws: IntelligenceError.invalidEdit) {
                 try await fixture.edit(input)
             }
@@ -347,7 +351,7 @@ struct EditTests {
 
     @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
         let fixture = FixtureLanguageModel()
-        fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
+        fixture.operations = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
         let daily = request("## 📆 2026-10-24\n\n- [ ]", "mark everything complete")
         #expect(
             try await fixture.edit(daily).application(to: daily.snapshot).source
@@ -366,18 +370,18 @@ struct EditTests {
                         .replacingOccurrences(of: "  - [ ]\r\n", with: "  - [x]\r\n").utf8))
 
         let source = "# Today 👩🏽‍💻\r\n\r\n- [ ] Read café\r\n- [X] Done\r\n- [ ] Keep this\r\n"
-        fixture.changes = { _ in [.setTaskStates(ids: [1, 2], isComplete: true)] }
+        fixture.operations = { _ in [.setTaskStates(ids: [1, 2], isComplete: true)] }
         let subset = request(source, "mark the first two done")
         #expect(
             try await fixture.edit(subset).application(to: subset.snapshot).source
                 == source.replacingOccurrences(of: "[ ] Read", with: "[x] Read"))
-        fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: false)] }
+        fixture.operations = { _ in [.setTaskStates(ids: nil, isComplete: false)] }
         let uncheck = request(source, "uncheck all")
         #expect(
             try await fixture.edit(uncheck).application(to: uncheck.snapshot).source
                 == source.replacingOccurrences(of: "[X]", with: "[ ]"))
         for ids in [[99], [1, 1], []] {
-            fixture.changes = { _ in [.setTaskStates(ids: ids, isComplete: true)] }
+            fixture.operations = { _ in [.setTaskStates(ids: ids, isComplete: true)] }
             await #expect(throws: IntelligenceError.invalidResponse) {
                 try await fixture.edit(request(source, "Complete it"))
             }
@@ -433,7 +437,7 @@ struct EditTests {
         func revised(_ text: String, _ revision: String) async throws -> String {
             let source = text.replacingOccurrences(of: "\n", with: newline)
             let fixture = FixtureLanguageModel()
-            fixture.changes = rewrite(revision)
+            fixture.operations = rewrite(revision)
             let input = request(source, "Edit")
             return try await fixture.edit(input)
                 .application(to: input.snapshot).source.replacingOccurrences(of: newline, with: "\n")
@@ -488,7 +492,7 @@ struct EditTests {
     @Test func aRevisionLetsItsDiffSpeakAndNeverSeesFrontMatter() async throws {
         func reasons(_ source: String, _ revision: String) async throws -> [String] {
             let fixture = FixtureLanguageModel()
-            fixture.changes = rewrite(revision)
+            fixture.operations = rewrite(revision)
             return try await fixture.edit(request(source, "Edit"))
                 .changes.map(\.reason)
         }
@@ -497,7 +501,7 @@ struct EditTests {
         #expect(try await reasons("A\n\nB\n\nC", "A\n\nC") == [""])
 
         let fixture = FixtureLanguageModel()
-        fixture.changes = rewrite("# Today")
+        fixture.operations = rewrite("# Today")
         let dated = request("---\ndate: 2025-01-01\n---\n# Note\n", "Rename it Today")
         let proposal = try await fixture.edit(dated)
         #expect(fixture.passes.map(\.source) == ["# Note\n"])

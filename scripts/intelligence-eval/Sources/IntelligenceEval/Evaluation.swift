@@ -393,7 +393,7 @@ private struct FavoriteGrade {
 }
 
 /// Counts answer generations and records the prose Ask's quality gate rejects and the
-/// model's raw edit operations, so a failing case shows what the model actually proposed.
+/// model's raw edit operations and suggestions, so a failing case shows what the model actually proposed.
 @MainActor
 final class RecordingModel: IntelligenceModel {
     private let model = OnDeviceModel()
@@ -409,10 +409,15 @@ final class RecordingModel: IntelligenceModel {
         inputTokens = max(inputTokens ?? 0, count)
         return count
     }
-    func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
-        let operations = try await model.editOperations(for: pass)
+    func operations(for pass: ModelPass) async throws -> [EditOperation] {
+        let operations = try await model.operations(for: pass)
         self.operations += operations.map { String(reflecting: $0) }
         return operations
+    }
+    func suggestions(for pass: ModelPass) async throws -> [Proposal.Change] {
+        let suggestions = try await model.suggestions(for: pass)
+        operations += suggestions.map { String(reflecting: $0) }
+        return suggestions
     }
     func excerpts(for pass: ModelPass) async throws -> [String] {
         try await model.excerpts(for: pass)

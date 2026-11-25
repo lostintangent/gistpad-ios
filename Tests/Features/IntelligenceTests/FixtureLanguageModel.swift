@@ -16,17 +16,18 @@ import Foundation
     var answer = Answer.Reply(
         prose: "You leave at 9am, an hour after the cafe opens.", quotes: ["Leave at 9am"])
     var partialAnswers: [String] = []
-    var changes: (ModelPass) -> [ModelEdit] = { _ in
+    static var fixes: [Proposal.Change] {
         [
-            .replace(
-                Proposal.Change(
-                    quote: "teh", replacement: "the", reason: "Fix the spelling of “the”.")),
-            .replace(
-                Proposal.Change(
-                    quote: "before the cafe opens", replacement: "after the cafe opens",
-                    reason: "9am is after the cafe opens at 8am.")),
+            Proposal.Change(quote: "teh", replacement: "the", reason: "Fix the spelling of “the”."),
+            Proposal.Change(
+                quote: "before the cafe opens", replacement: "after the cafe opens",
+                reason: "9am is after the cafe opens at 8am."),
         ]
     }
+    var operations: (ModelPass) -> [EditOperation] = { pass in
+        fixes.map { .replaceRegion((pass.source as NSString).range(of: $0.quote), $0) }
+    }
+    var suggestions: (ModelPass) -> [Proposal.Change] = { _ in fixes }
     var excerpts: (ModelPass) -> [String] = { _ in [] }
     private(set) var passes: [ModelPass] = []
 
@@ -34,9 +35,14 @@ import Foundation
         64 + pass.source.utf16.count + pass.instruction.utf16.count
     }
 
-    func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
+    func operations(for pass: ModelPass) async throws -> [EditOperation] {
         try await record(pass)
-        return changes(pass)
+        return operations(pass)
+    }
+
+    func suggestions(for pass: ModelPass) async throws -> [Proposal.Change] {
+        try await record(pass)
+        return suggestions(pass)
     }
 
     func excerpts(for pass: ModelPass) async throws -> [String] {

@@ -37,112 +37,18 @@ extension IntelligenceModel {
             try Task.checkCancellation()
             let (current, total) = (completed + 1, completed + pending.count + 1)
             progress(purpose == .edit ? .editing(current, of: total) : .reviewing(current, of: total))
-            let chunkSource = text(chunk, of: request)
             do {
-                let input = pass(request, purpose: purpose, source: chunkSource, scope: chunk)
-                let operations = try await editOperations(for: input)
-                try Task.checkCancellation()
-                for operation in operations {
-                    switch operation {
-                    case .replace(let candidate):
-                        if purpose == .edit, candidate.replacement == nil {
-                            throw IntelligenceError.invalidResponse
-                        }
-                        candidates.append((candidate, chunk))
-                    case .setTaskStates(let ids, let isComplete):
-                        guard ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
-                        else { throw IntelligenceError.invalidResponse }
-                        let selected =
-                            ids.map { identifiers in
-                                input.tasks.filter { identifiers.contains($0.id) }
-                            } ?? input.tasks
-                        guard ids == nil || selected.count == ids?.count else {
-                            throw IntelligenceError.invalidResponse
-                        }
-                        for task in selected where task.isComplete != isComplete {
-                            candidates.append(
-                                (
-                                    Proposal.Change(
-                                        quote: (request.snapshot.source as NSString).substring(with: task.range),
-                                        replacement: isComplete ? "[x]" : "[ ]",
-                                        reason: isComplete
-                                            ? String(localized: "Mark this task complete.", bundle: .module)
-                                            : String(localized: "Mark this task incomplete.", bundle: .module)),
-                                    task.range
-                                ))
-                        }
-                    case .deleteTasks(let ids):
-                        guard !ids.isEmpty, Set(ids).count == ids.count,
-                            ids.allSatisfy({ id in input.tasks.contains { $0.id == id } })
-                        else { throw IntelligenceError.invalidEdit }
-                        for task in input.tasks where ids.contains(task.id) {
-                            let line = (request.snapshot.source as NSString).lineRange(for: task.range)
-                            let text = (request.snapshot.source as NSString).substring(with: line)
-                            candidates.append(
-                                (
-                                    Proposal.Change(
-                                        quote: text, replacement: "",
-                                        reason: String(localized: "Remove this task.", bundle: .module)), line
-                                ))
-                        }
-                    case .insertTask(let listID, let text):
-                        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                            !text.contains(where: \.isNewline)
-                        else { throw IntelligenceError.invalidEdit }
-                        let source = request.snapshot.source as NSString
-                        let last = input.tasks.last { $0.listID == listID }
-                        guard last != nil || (listID == 0 && request.snapshot.tasks.isEmpty) else {
-                            throw IntelligenceError.invalidEdit
-                        }
-                        let newline = request.snapshot.source.contains("\r\n") ? "\r\n" : "\n"
-                        let offset: Int
-                        let insertion: String
-                        if let last {
-                            let line = source.lineRange(for: last.range)
-                            offset = NSMaxRange(line)
-                            let prefix = source.substring(
-                                with: NSRange(
-                                    location: line.location, length: last.range.location - line.location))
-                            let lineText = source.substring(with: line)
-                            let ending = lineText.last.flatMap { $0.isNewline ? String($0) : nil }
-                            let taskNewline = ending ?? newline
-                            insertion =
-                                (ending == nil ? taskNewline : "") + prefix + "[ ] " + text
-                                + (ending == nil ? "" : taskNewline)
-                        } else {
-                            offset = source.length
-                            insertion =
-                                (source.length == 0 || request.snapshot.source.last?.isNewline == true
-                                    ? "" : newline) + "- [ ] " + text + newline
-                        }
-                        candidates.append(
-                            (
-                                Proposal.Change(
-                                    quote: "", replacement: insertion,
-                                    reason: String(localized: "Add this task.", bundle: .module)),
-                                NSRange(location: offset, length: 0)
-                            ))
-                    case .rewriteRegion(let relative, let revised):
-                        guard relative.location >= 0, NSMaxRange(relative) <= chunk.length
-                        else { throw IntelligenceError.invalidResponse }
-                        candidates += try Proposal.Change.lineChanges(
-                            in: request.snapshot.source,
-                            visible: NSRange(
-                                location: chunk.location + relative.location, length: relative.length),
-                            revised: revised)
-                    case .replaceRegion(let relative, let candidate):
-                        guard relative.location >= 0, relative.length > 0,
-                            NSMaxRange(relative) <= chunk.length,
-                            candidate.replacement != nil,
-                            candidate.quote.utf8.elementsEqual(
-                                (chunkSource as NSString).substring(with: relative).utf8)
-                        else { throw IntelligenceError.invalidResponse }
-                        candidates.append(
-                            (
-                                candidate,
-                                NSRange(location: chunk.location + relative.location, length: relative.length)
-                            ))
+                let input = pass(request, purpose: purpose, source: text(chunk, of: request), scope: chunk)
+                if purpose == .edit {
+                    let operations = try await self.operations(for: input)
+                    try Task.checkCancellation()
+                    candidates += try operations.flatMap {
+                        try $0.changes(in: request.snapshot, pass: input, scope: chunk)
                     }
+                } else {
+                    let suggestions = try await self.suggestions(for: input)
+                    try Task.checkCancellation()
+                    candidates += suggestions.map { ($0, chunk) }
                 }
                 completed += 1
                 // Selection needs a smaller part when the response or context cannot fit.

@@ -3,11 +3,10 @@ import FoundationModels
 import OSLog
 
 extension OnDeviceModel {
-    package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
-        if pass.purpose == .review { return try await replacements(for: pass).map(ModelEdit.replace) }
+    package func operations(for pass: ModelPass) async throws -> [EditOperation] {
         return try await perform(pass: pass) {
             if isRelocating(pass.instruction, in: pass.source) {
-                let edits = try await editOperations(.text, for: pass)
+                let edits = try await operations(.text, for: pass)
                 guard edits.count >= 2 || edits.contains(where: {
                     guard case .rewriteRegion(let range, _) = $0 else { return false }
                     return range == NSRange(location: 0, length: pass.source.utf16.count)
@@ -15,7 +14,7 @@ extension OnDeviceModel {
                 return edits
             }
             // A whole note without tasks can't need a task edit, so it goes straight to the rewrite.
-            if !pass.isPart, pass.tasks.isEmpty { return try await editOperations(.text, for: pass) }
+            if !pass.isPart, pass.tasks.isEmpty { return try await operations(.text, for: pass) }
             // Platform gap: AFM Core classifies these English additions as task edits despite the
             // intent guidance. Remove when an on-device model passes the Edit eval without this route.
             if pass.instruction.range(
@@ -25,11 +24,11 @@ extension OnDeviceModel {
                     of: #"\b(tasks?|check(?:box|list)?|to-do)\b"#,
                     options: [.regularExpression, .caseInsensitive]) == nil
             {
-                return try await editOperations(.text, for: pass)
+                return try await operations(.text, for: pass)
             }
             let intent = try await editIntent(pass.instruction)
             guard intent.changesOtherText, intent.kind != .text else {
-                return try await editOperations(intent.changesOtherText ? .text : intent.kind, for: pass)
+                return try await operations(intent.changesOtherText ? .text : intent.kind, for: pass)
             }
             // The model reliably makes one kind of change at a time, so a request mixing a task change
             // with other text runs as its separate edits. Each task edit keeps the whole request's kind,
@@ -49,17 +48,17 @@ extension OnDeviceModel {
             ).respond(
                 to: pass.instruction, generating: AppleEditSteps.self,
                 options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 192))
-            var operations: [ModelEdit] = []
+            var edits: [EditOperation] = []
             for step in steps.content.steps {
                 let stepIntent = try await editIntent(step)
-                operations += try await editOperations(
+                edits += try await operations(
                     stepIntent.changesOtherText || stepIntent.kind == .text ? .text : intent.kind,
                     for: ModelPass(
                         purpose: pass.purpose, instruction: step, source: pass.source,
                         responseTokens: pass.responseTokens, requestID: pass.requestID, tasks: pass.tasks,
                         isPart: pass.isPart))
             }
-            return operations
+            return edits
         }
     }
 
@@ -97,7 +96,7 @@ extension OnDeviceModel {
         let headings: [Heading]
     }
 
-    func sectionEdits(for pass: ModelPass) async throws -> [ModelEdit] {
+    func sectionEdits(for pass: ModelPass) async throws -> [EditOperation] {
         let sections = EditBlock.sections(in: pass.source)
         guard !sections.isEmpty else { return try await blockEdits(for: pass) }
         let blocks = EditBlock.indexed(in: pass.source)
@@ -140,7 +139,7 @@ extension OnDeviceModel {
                     maximum: isRelocating(pass.instruction, in: pass.source) ? 2 : 1,
                     pass: pass, phase: "editSection")
             }
-        var edits: [ModelEdit] = []
+        var edits: [EditOperation] = []
         for id in ids {
             try Task.checkCancellation()
             let section = sections[id - 1]
@@ -216,7 +215,7 @@ extension OnDeviceModel {
         return edits
     }
 
-    private func blockEdits(for pass: ModelPass) async throws -> [ModelEdit] {
+    private func blockEdits(for pass: ModelPass) async throws -> [EditOperation] {
         let blocks = EditBlock.indexed(in: pass.source)
         let selected = try await selectedBlocks(for: pass, from: blocks)
         return try await blockEdits(for: pass, blocks: blocks, selected: selected)
@@ -259,9 +258,9 @@ extension OnDeviceModel {
 
     private func blockEdits(
         for pass: ModelPass, blocks: [EditBlock], selected: [EditBlock]
-    ) async throws -> [ModelEdit] {
+    ) async throws -> [EditOperation] {
         let relocating = isRelocating(pass.instruction, in: pass.source)
-        var edits: [ModelEdit] = []
+        var edits: [EditOperation] = []
         for block in selected {
             try Task.checkCancellation()
             let previous = block.id > 1 ? blocks[block.id - 2] : nil

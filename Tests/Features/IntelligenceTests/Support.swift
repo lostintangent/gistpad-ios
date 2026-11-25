@@ -11,7 +11,7 @@ func request(_ source: String, _ instruction: String = "") -> IntelligenceReques
 }
 
 /// The model revising everything it was shown.
-func rewrite(_ revised: String) -> (ModelPass) -> [ModelEdit] {
+func rewrite(_ revised: String) -> (ModelPass) -> [EditOperation] {
     { [.rewriteRegion(NSRange(location: 0, length: $0.source.utf16.count), revised: revised)] }
 }
 

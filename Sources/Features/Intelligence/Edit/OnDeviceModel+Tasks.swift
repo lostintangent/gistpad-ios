@@ -24,9 +24,9 @@ extension OnDeviceModel {
         ).content
     }
 
-    func editOperations(
+    func operations(
         _ kind: AppleEditKind, for pass: ModelPass
-    ) async throws -> [ModelEdit] {
+    ) async throws -> [EditOperation] {
         switch kind {
         case .completeAllTasks: return [.setTaskStates(ids: nil, isComplete: true)]
         case .uncheckAllTasks: return [.setTaskStates(ids: nil, isComplete: false)]

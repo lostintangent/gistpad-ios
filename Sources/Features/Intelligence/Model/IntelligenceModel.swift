@@ -6,8 +6,8 @@ package protocol IntelligenceModel {
     /// The tokens one session holds, its instructions, prompt and response together.
     var contextSize: Int { get }
     func tokenCount(for pass: ModelPass) async throws -> Int
-    /// Edit's operations, or Review's suggestions as replacements.
-    func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
+    func operations(for pass: ModelPass) async throws -> [EditOperation]
+    func suggestions(for pass: ModelPass) async throws -> [Proposal.Change]
     func excerpts(for pass: ModelPass) async throws -> [String]
     /// Ask's reply, streaming its visible prose to `onUpdate`.
     func reply(
@@ -61,15 +61,4 @@ package struct ModelTask: Sendable, Encodable {
                 listID: listID, listTitle: heading.map { text.substring(with: $0) } ?? "")
         }
     }
-}
-
-package enum ModelEdit: Sendable {
-    case replace(Proposal.Change)
-    case setTaskStates(ids: [Int]?, isComplete: Bool)
-    case insertTask(listID: Int, text: String)
-    case deleteTasks(ids: [Int])
-    /// A region as the model revised it, using a UTF-16 range relative to the model pass.
-    /// The app compares it line by line.
-    case rewriteRegion(NSRange, revised: String)
-    case replaceRegion(NSRange, Proposal.Change)
 }

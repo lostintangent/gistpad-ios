@@ -2,7 +2,7 @@ import Foundation
 import FoundationModels
 
 extension OnDeviceModel {
-    func replacements(for pass: ModelPass) async throws -> [Proposal.Change] {
+    package func suggestions(for pass: ModelPass) async throws -> [Proposal.Change] {
         try await perform(pass: pass) {
             let session = session(for: pass)
             let response = try await session.respond(
