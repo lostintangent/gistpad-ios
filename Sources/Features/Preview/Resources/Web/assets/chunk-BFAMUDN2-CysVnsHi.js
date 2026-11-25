@@ -1,0 +1,1 @@
+import{i as e,t}from"./d3-selection-z6Hi5H6Q.js";var n=e((e,n)=>{let r;return n===`sandbox`&&(r=t(`#i`+e)),t(n===`sandbox`?r.nodes()[0].contentDocument.body:`body`).select(`[id="${e}"]`)},`getDiagramElement`);export{n as t};

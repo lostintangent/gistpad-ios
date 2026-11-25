@@ -96,11 +96,11 @@ final class CommentsPresentation {
         await prepare()?.refresh()
     }
 
-    /// The file's comment highlights in one mode, or nil when the file has no comments.
-    func highlights(for fileEditor: GistFileEditor, origin: FileMode) -> CommentHighlights? {
+    /// The file's comment annotations in one mode, or nil when the file has no comments.
+    func annotations(for fileEditor: GistFileEditor, origin: FileMode) -> CommentAnnotations? {
         guard Self.supports(fileEditor.file) else { return nil }
         let isCurrent = { self.fileEditor === fileEditor }
-        var highlights = CommentHighlights(
+        var annotations = CommentAnnotations(
             open: { ids in
                 guard isCurrent() else { return }
                 if ids.count == 1, let id = ids.first {
@@ -119,12 +119,12 @@ final class CommentsPresentation {
                 self.open(for: fileEditor, origin: origin, quote: selection)
             })
         if matches(fileEditor.file), let model {
-            highlights.quotes = model.threads.compactMap(\.quotedPassage)
-            highlights.selectedThreadID = selectedThreadID
-            highlights.revealRevision = revealRevision
-            highlights.showsInlineComments = showsInlineComments
+            annotations.quotes = model.threads.compactMap(\.quotedPassage)
+            annotations.selectedThreadID = selectedThreadID
+            annotations.revealRevision = revealRevision
+            annotations.showsInlineComments = showsInlineComments
         }
-        return highlights
+        return annotations
     }
 
     func open(

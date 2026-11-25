@@ -10,7 +10,7 @@ import Markdown
 /// A rendered Markdown document. Give each file its own identity, so a new file starts at its top.
 public struct MarkdownPreviewView: View {
     private let file: PreviewFile
-    private let comments: CommentHighlights?
+    private let comments: CommentAnnotations?
     private let edit: (@MainActor (MarkdownEdit) -> Void)?
     private let openWikilink: (@MainActor (String) -> Void)?
     @State private var failed = false
@@ -18,7 +18,7 @@ public struct MarkdownPreviewView: View {
     /// Tapping a task box makes its edit and hands it to `edit`. Without `edit`, the boxes are read-only.
     public init(
         document: MarkdownDocument,
-        comments: CommentHighlights? = nil,
+        comments: CommentAnnotations? = nil,
         edit: (@MainActor (MarkdownEdit) -> Void)? = nil,
         openWikilink: (@MainActor (String) -> Void)? = nil
     ) {
@@ -53,7 +53,7 @@ public struct MarkdownPreviewView: View {
 // wrapper when webViewContextMenu, webViewObscuredContentInsets and a termination event ship for iOS.
 private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
-    let comments: CommentHighlights?
+    let comments: CommentAnnotations?
     let edit: (@MainActor (MarkdownEdit) -> Void)?
     let openWikilink: (@MainActor (String) -> Void)?
     let onFailure: @MainActor () -> Void
@@ -87,9 +87,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.allowsLinkPreview = false
         webView.scrollView.delegate = context.coordinator
         context.coordinator.webView = webView
-        context.coordinator.commentHighlighter.webView = webView
+        context.coordinator.commentAnnotator.webView = webView
         let coordinator = context.coordinator
-        webView.onBuildCommentMenu = { [weak coordinator] in coordinator?.commentHighlighter.addCommentMenu() }
+        webView.onBuildCommentMenu = { [weak coordinator] in coordinator?.commentAnnotator.addCommentMenu() }
         webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         return webView
     }
@@ -105,13 +105,13 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             $0[AccentTrait.self] = accent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
-        context.coordinator.commentHighlighter.update(file: file, comments: comments, accent: accent.color.hex)
+        context.coordinator.commentAnnotator.update(file: file, comments: comments, accent: accent.color.hex)
         context.coordinator.update()
     }
 
     static func dismantleUIView(_ uiView: PreviewWebView, coordinator: Coordinator) {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadPreview")
-        coordinator.commentHighlighter.reset()
+        coordinator.commentAnnotator.reset()
         uiView.stopLoading()
     }
 
@@ -119,7 +119,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         fileprivate var parent: NativeMarkdownPreview
         fileprivate weak var webView: WKWebView?
         fileprivate var appearance: PreviewAppearance?
-        fileprivate let commentHighlighter = CommentHighlighter()
+        fileprivate let commentAnnotator = CommentAnnotator()
         private var lastSent: PreviewFile?
         /// Counts renders. The page repeats the count in each message, so one from an earlier render drops.
         private var generation: UInt64 = 0
@@ -190,9 +190,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 case .failure(let reason):
                     fail(reason)
                 case .commentActivate(let segment, let start, let end):
-                    try commentHighlighter.activate(segment: segment, start: start, end: end)
+                    try commentAnnotator.activate(segment: segment, start: start, end: end)
                 case .rendered:
-                    commentHighlighter.rendered(parent.file)
+                    commentAnnotator.rendered(parent.file)
                 case nil:
                     Logger.preview.debug("Dropped a preview message from an earlier render.")
                 }
@@ -220,7 +220,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             ready = false
             lastSent = nil
             lastAppearance = nil
-            commentHighlighter.reset()
+            commentAnnotator.reset()
             // Crash recovery leaves about:blank, so reload() would bounce on an empty page.
             webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         }

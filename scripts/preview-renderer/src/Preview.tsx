@@ -13,7 +13,7 @@ import Mermaid from "../../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskMarkerPlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
 import { identity, send, type RenderRequest } from "./protocol";
-import { CommentText, type CommentHighlightController } from "./commentHighlights";
+import { CommentText, type CommentAnnotationController } from "./commentAnnotations";
 
 const emojis = new Map(
   Object.entries(emojiData.emojis).map(([id, emoji]) => [id, emoji.skins[0]?.native ?? ""]),
@@ -106,7 +106,7 @@ export class PreviewErrorBoundary extends Component<
   }
 }
 
-export function Preview({ request, comments }: { request: RenderRequest; comments: CommentHighlightController }) {
+export function Preview({ request, comments }: { request: RenderRequest; comments: CommentAnnotationController }) {
   const taskPlugins = useMemo(() => taskMarkerPlugins(request.markdown), [request]);
   const contents = useRef({ open: false });
   const components = useMemo<Components>(() => {

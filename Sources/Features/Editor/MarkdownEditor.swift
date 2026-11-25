@@ -29,7 +29,7 @@
         @ObservationIgnored private var unedited: (prefix: Int, suffix: Int)?
         /// A caret placed by a focus request, waiting for the text view to reach a window.
         @ObservationIgnored public private(set) var isFocusPending = false
-        @ObservationIgnored lazy var commentHighlighter = CommentHighlighter(editor: self)
+        @ObservationIgnored lazy var commentAnnotator = CommentAnnotator(editor: self)
 
         public init(
             text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
@@ -65,7 +65,7 @@
             }
             textView.registerForTraitChanges([AccentTrait.self]) {
                 (view: TextView, _: UITraitCollection) in
-                view.editor?.commentHighlighter.accentDidChange()
+                view.editor?.commentAnnotator.accentDidChange()
             }
             updateHiddenFrontMatter()
             textView.selectedRange = NSRange(location: contentStart, length: 0)
@@ -232,7 +232,7 @@
 
         public func find(replacing: Bool = false) {
             guard isSettled else { return inputError = .unsettled }
-            commentHighlighter.suspendForFind()
+            commentAnnotator.suspendForFind()
             textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
         }
 
@@ -248,7 +248,7 @@
             guard isSettled, !isHighlighting else { return }
             let document = shownDocument
             var range = document.range
-            if let highlighted, commentHighlighter.quotes.isEmpty {
+            if let highlighted, commentAnnotator.quotes.isEmpty {
                 guard let unedited else { return }
                 let edited = NSRange(unedited.prefix..<(range.length - unedited.suffix))
                 range = document.spanRange(for: edited, from: highlighted)
@@ -258,7 +258,7 @@
             let style = MarkdownStyle(traits: textView.traitCollection)
             textView.updateAttributes(in: range) { storage in
                 style.apply(document.spans(in: range), to: storage, in: range)
-                commentHighlighter.paint(in: storage)
+                commentAnnotator.annotate(storage)
             }
             textView.typingAttributes = style.typingAttributes
             highlighted = document
@@ -301,7 +301,7 @@
             commitComposition()
             showsFrontMatter = value
             updateHiddenFrontMatter()
-            commentHighlighter.frontMatterVisibilityDidChange()
+            commentAnnotator.frontMatterVisibilityDidChange()
         }
 
         public func textContentManager(
@@ -381,19 +381,19 @@
             }
             isComposing = textView.markedTextRange != nil
             if isComposing { textView.cancelEditingCaretReveal() }
-            commentHighlighter.selectionDidChange()
+            commentAnnotator.selectionDidChange()
         }
 
         public func textViewWritingToolsWillBegin(_: UITextView) {
             synchronizeText()
-            commentHighlighter.suspendForWritingTools()
+            commentAnnotator.suspendForWritingTools()
             isWritingToolsActive = true
             textView.cancelEditingCaretReveal()
         }
 
         public func textViewWritingToolsDidEnd(_: UITextView) {
             isWritingToolsActive = false
-            commentHighlighter.resumeAfterWritingTools()
+            commentAnnotator.resumeAfterWritingTools()
             synchronizeText()
             textView.rememberReadingAnchor()
         }
@@ -426,7 +426,7 @@
             _ textView: UITextView, editMenuForTextInRanges ranges: [NSValue],
             suggestedActions: [UIMenuElement]
         ) -> UIMenu? {
-            commentHighlighter.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
+            commentAnnotator.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
         }
     }
 #endif

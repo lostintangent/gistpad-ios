@@ -32,7 +32,7 @@ declare global {
       setAppearance: (appearance: import("./appearance").Appearance) => void;
       commentSegments: () => string[];
       commentSelection: () => string | null;
-      setCommentHighlights: (value: import("./commentHighlights").HighlightState) => void;
+      setCommentAnnotations: (value: import("./commentAnnotations").AnnotationState) => void;
     };
     webkit?: {
       messageHandlers?: {

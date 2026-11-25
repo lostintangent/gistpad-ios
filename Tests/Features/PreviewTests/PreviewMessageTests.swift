@@ -49,12 +49,12 @@ struct PreviewMessageTests {
         #expect(url.absoluteString == "https://example.com")
     }
 
-    @Test("A tapped highlight arrives as its segment and range")
+    @Test("A tapped annotation arrives as its segment and range")
     func commentActivation() throws {
         let tap: [String: Any] = ["type": "commentActivate", "segment": 2, "start": 4, "end": 9]
         #expect(throws: PreviewError.self) { try message(tap.filter { $0.key != "end" }) }
         guard case .commentActivate(segment: 2, start: 4, end: 9)? = try message(tap) else {
-            Issue.record("Expected the tapped highlight")
+            Issue.record("Expected the tapped annotation")
             return
         }
     }

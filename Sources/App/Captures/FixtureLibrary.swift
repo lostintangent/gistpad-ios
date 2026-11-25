@@ -31,8 +31,8 @@
                 id: "words", description: "Words worth keeping",
                 files: ["words.md": listMarkers], updatedAt: now - day)
             server.addGist(
-                id: "highlights", description: "A gist with comments",
-                files: ["comments.md": highlightMarkdown], updatedAt: now - 5 * hour,
+                id: "comments", description: "A gist with comments",
+                files: ["comments.md": commentsMarkdown], updatedAt: now - 5 * hour,
                 comments: [
                     "> quiet native\n\nThis is the tone to keep.",
                     "> careful\n\nMaybe a softer word here?",
@@ -161,7 +161,7 @@
 
         private static func dailyFile(_ date: Date) -> String { DailyNote.filename(date: date) }
 
-        private static let highlightMarkdown =
+        private static let commentsMarkdown =
             """
             # Comment notebook
 

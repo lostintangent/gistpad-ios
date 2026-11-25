@@ -363,13 +363,13 @@ struct RootView: View {
                 ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
                 : nil,
             intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
-            comments: comments.highlights(for: fileEditor, origin: .edit))
+            comments: comments.annotations(for: fileEditor, origin: .edit))
     }
 
     private func preview(_ fileEditor: GistFileEditor) -> some View {
         FilePreview(
             editor: fileEditor.editor, allowsMutations: fileEditor.details.isOwned,
-            comments: comments.highlights(for: fileEditor, origin: .preview),
+            comments: comments.annotations(for: fileEditor, origin: .preview),
             openWikilink: { target in
                 if let gist = model.state.gists.first(where: {
                     $0.title.localizedStandardCompare(target) == .orderedSame

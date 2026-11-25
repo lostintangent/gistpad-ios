@@ -11,7 +11,7 @@
         private let title: String?
         private let insertImage: (@MainActor () -> Void)?
         private let intelligence: (@MainActor () -> Void)?
-        private let comments: CommentHighlights?
+        private let comments: CommentAnnotations?
         @State private var linkRequest: LinkRequest?
 
         public init(
@@ -19,7 +19,7 @@
             title: String? = nil,
             insertImage: (@MainActor () -> Void)? = nil,
             intelligence: (@MainActor () -> Void)? = nil,
-            comments: CommentHighlights? = nil
+            comments: CommentAnnotations? = nil
         ) {
             self.editor = editor
             self.title = title
@@ -63,7 +63,7 @@
     private struct TextViewRepresentable: UIViewRepresentable {
         let editor: MarkdownEditor
         let title: String?
-        let comments: CommentHighlights?
+        let comments: CommentAnnotations?
         let actions: KeyboardBarActions
         @Environment(\.isPaneVisible) private var isPaneVisible
         @Environment(\.accent) private var accent
@@ -92,7 +92,7 @@
                     if view.isFirstResponder { view.reloadInputViews() }
                 }
                 view.traitOverrides[AccentTrait.self] = accent
-                editor.commentHighlighter.configure(comments)
+                editor.commentAnnotator.configure(comments)
             }
             host.isPaneVisible = isPaneVisible
         }
@@ -168,7 +168,7 @@
             configuration = nil
             updateOwnership()
             guard editor.host == nil, editor.textView.superview === self else { return }
-            editor.commentHighlighter.configure(nil)
+            editor.commentAnnotator.configure(nil)
             editor.textView.inputAccessoryView = nil
             editor.textView.removeFromSuperview()
         }

@@ -6,7 +6,7 @@ import SwiftUI
 struct FilePreview: View {
     let editor: MarkdownEditor
     var allowsMutations = true
-    var comments: CommentHighlights?
+    var comments: CommentAnnotations?
     var openWikilink: (@MainActor (String) -> Void)?
 
     var body: some View {

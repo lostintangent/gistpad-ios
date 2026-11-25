@@ -24,7 +24,7 @@ export function taskMarkerPlugins(markdown: string) {
         const start = node.position?.start.offset;
         const location = start === undefined ? undefined : markers.get(start);
         if (location === undefined) return;
-        function annotate(element: Element) {
+        function locateCheckbox(element: Element) {
           for (const child of element.children) {
             if (child.type !== "element" || child.tagName === "ul" || child.tagName === "ol") continue;
             if (child.tagName === "input" && child.properties.type === "checkbox") {
@@ -34,11 +34,11 @@ export function taskMarkerPlugins(markdown: string) {
                 .map((child) => toString(child)).join("").trim();
               return true;
             }
-            if (annotate(child)) return true;
+            if (locateCheckbox(child)) return true;
           }
           return false;
         }
-        annotate(node);
+        locateCheckbox(node);
       });
     },
     markers,

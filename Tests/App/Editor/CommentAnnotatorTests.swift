@@ -1,0 +1,306 @@
+import Accessibility
+import Comments
+import Markdown
+import Testing
+import UIKit
+@testable import Editor
+
+@Suite(.serialized, .timeLimit(.minutes(1)))
+struct CommentAnnotatorTests {
+    @Test func typingKeepsPillsAndMutesANewListMarker() throws {
+        let editor = MarkdownEditor(text: "A native note\n")
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        editor.commentAnnotator.configure(
+            annotations([CommentQuote(threadID: 10, quote: "native")]))
+        editor.textView.layoutIfNeeded()
+        #expect(editor.commentAnnotator.backgroundLayer.sublayers?.isEmpty == false)
+        editor.textView.selectedRange = NSRange(location: editor.document.text.utf16.count, length: 0)
+        editor.textView.insertText("- ")
+        editor.textView.layoutIfNeeded()
+        let storage = editor.textView.textStorage
+        let marker = (editor.document.text as NSString).range(of: "-")
+        let ink = try #require(
+            storage.attribute(.foregroundColor, at: marker.location, effectiveRange: nil) as? UIColor)
+        let traits = editor.textView.traitCollection
+        #expect(
+            ink.resolvedColor(with: traits).isEqual(
+                UIColor.secondaryLabel.resolvedColor(with: traits)))
+        #expect(
+            storage.attribute(CommentAnnotator.annotationKey, at: 2, effectiveRange: nil) != nil)
+        #expect(editor.commentAnnotator.backgroundLayer.sublayers?.isEmpty == false)
+    }
+
+    @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
+        let editor = MarkdownEditor(text: "A native note", generation: 7)
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        let undo = try #require(editor.textView.undoManager)
+        undo.removeAllActions()
+        try editor.apply(editor.document.edit(replacing: NSRange(location: 0, length: 1), with: "The"))
+        editor.textView.selectedRange = NSRange(location: 4, length: 6)
+        let selection = editor.textView.selectedRange
+        var changes = 0
+        editor.onEdit = { _, _ in changes += 1 }
+        editor.commentAnnotator.configure(
+            annotations(
+                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        editor.highlight()
+        #expect(editor.document.text == "The native note")
+        #expect(editor.generation == 8)
+        #expect(editor.textView.selectedRange == selection)
+        #expect(changes == 0)
+        #expect(editor.textView.textLayoutManager != nil)
+        #expect(editor.textView.typingAttributes[.textHighlightStyle] == nil)
+        #expect(editor.textView.typingAttributes[.textItemTag] == nil)
+        undo.undo()
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.document.text == "A native note")
+        #expect(!undo.canUndo)
+        undo.redo()
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.document.text == "The native note")
+    }
+
+    @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
+        let editor = MarkdownEditor(text: "one two three")
+        var opened: [[Int64]] = []
+        editor.commentAnnotator.configure(
+            annotations([
+                CommentQuote(threadID: 10, quote: "one two"),
+                CommentQuote(threadID: 20, quote: "two three"),
+            ], open: { opened.append($0) }))
+        #expect(
+            editor.textView.textStorage.attribute(
+                CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) != nil)
+        #expect(
+            editor.textView.textStorage.attribute(.textHighlightStyle, at: 5, effectiveRange: nil)
+                == nil)
+        #expect(
+            editor.textView.textStorage.attribute(
+                .textItemTag, at: 5, effectiveRange: nil) == nil)
+        let copy = UIAction(title: "System Copy") { _ in }
+        let delegate: any UITextViewDelegate = editor
+        let menu = try #require(
+            delegate.textView?(
+                editor.textView,
+                editMenuForTextInRanges: [NSValue(range: NSRange(location: 4, length: 3))],
+                suggestedActions: [copy]) ?? nil)
+        #expect(menu.children.first === copy)
+        let section = try #require(menu.children.last as? UIMenu)
+        let action = try #require(section.children.first as? UIAction)
+        #expect(action.title == "View Comment")
+        let button = UIButton()
+        button.addAction(action, for: .touchUpInside)
+        button.sendActions(for: .touchUpInside)
+        #expect(opened == [[10, 20]])
+        #expect(editor.document.text == "one two three")
+        #expect(editor.generation == 0)
+    }
+
+    @Test func passagesHitTestNativeGeometryAndAddCommentKeepsTheExactSelection() throws {
+        let added = "  cafe\u{0301} 🫧\r\n"
+        let source =
+            "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n" + added
+        let editor = MarkdownEditor(text: source)
+        let window = try host(editor, focused: false)
+        defer { window.isHidden = true }
+        var quotes: [String] = []
+        editor.commentAnnotator.configure(
+            annotations([
+                CommentQuote(threadID: 10, quote: "quiet native"),
+                CommentQuote(threadID: 20, quote: "native note"),
+            ], add: { quotes.append($0) }))
+        editor.textView.layoutIfNeeded()
+        let range = (source as NSString).range(of: "native")
+        let start = try #require(
+            editor.textView.position(
+                from: editor.textView.beginningOfDocument, offset: range.location))
+        let end = try #require(editor.textView.position(from: start, offset: range.length))
+        let frame = editor.textView.firstRect(
+            for: try #require(editor.textView.textRange(from: start, to: end)))
+        #expect(!frame.isEmpty)
+        #expect(
+            editor.commentAnnotator.threadIDs(
+                at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
+            "Native frame \(frame), container inset \(editor.textView.textContainerInset)")
+
+        let copy = UIAction(title: "System Copy") { _ in }
+        let selection = editor.textView.selectedRange
+        let addedRange = NSRange(
+            location: source.utf16.count - added.utf16.count, length: added.utf16.count)
+        let menu = try #require(
+            editor.textView(
+                editor.textView, editMenuForTextInRanges: [NSValue(range: addedRange)],
+                suggestedActions: [copy]))
+        #expect(menu.children.first === copy)
+        let section = try #require(menu.children.last as? UIMenu)
+        let action = try #require(section.children.first as? UIAction)
+        #expect(action.title == "Add Comment")
+        let button = UIButton()
+        button.addAction(action, for: .touchUpInside)
+        button.sendActions(for: .touchUpInside)
+        #expect(quotes.count == 1)
+        #expect(try #require(quotes.first).utf8.elementsEqual(added.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.generation == 0)
+        #expect(editor.textView.selectedRange == selection)
+    }
+
+    @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
+        let text =
+            "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
+            + "A late native passage."
+        let editor = MarkdownEditor(text: text)
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        editor.textView.resignFirstResponder()
+        var comments = annotations(
+            [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60)
+        editor.commentAnnotator.configure(comments)
+        await editor.commentAnnotator.scrollTask?.value
+        #expect(editor.textView.contentOffset.y > 100)
+        let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
+        editor.textView.setContentOffset(top, animated: false)
+        editor.commentAnnotator.configure(comments)
+        editor.textView.layoutIfNeeded()
+        #expect(editor.commentAnnotator.scrollTask == nil)
+        #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
+        comments.revealRevision += 1
+        editor.commentAnnotator.configure(comments)
+        await editor.commentAnnotator.scrollTask?.value
+        #expect(editor.textView.contentOffset.y > 100)
+        #expect(editor.document.text == text)
+        #expect(editor.generation == 0)
+    }
+
+    @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
+        let editor = MarkdownEditor(text: "abc abcd 🫧🫧")
+        let range = NSValue(range: NSRange(location: 4, length: 4))
+        #expect(
+            editor.textView(
+                editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
+        editor.commentAnnotator.configure(annotations([]))
+        #expect(
+            editor.textView(
+                editor.textView,
+                editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
+                suggestedActions: []) == nil)
+        #expect(
+            editor.textView(
+                editor.textView, editMenuForTextInRanges: [range, range], suggestedActions: []) == nil)
+        #expect(
+            editor.textView(
+                editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) != nil)
+        #expect(
+            editor.textView(
+                editor.textView,
+                editMenuForTextInRanges: [NSValue(range: NSRange(location: 9, length: 4))],
+                suggestedActions: []) != nil)
+    }
+
+    @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
+        let editor = MarkdownEditor(text: "one two three")
+        editor.commentAnnotator.configure(
+            annotations(
+                [
+                    CommentQuote(threadID: 10, quote: "one two"),
+                    CommentQuote(threadID: 20, quote: "two three"),
+                ], selectedThreadID: 20, showsInlineComments: false))
+        #expect(
+            editor.textView.textStorage.attribute(
+                CommentAnnotator.annotationKey, at: 1, effectiveRange: nil) == nil)
+        #expect(
+            editor.textView.textStorage.attribute(
+                CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) != nil)
+        let menu = editor.textView(
+            editor.textView,
+            editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
+            suggestedActions: [])
+        #expect(menu != nil)
+    }
+
+    @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
+        let editor = MarkdownEditor(text: "---\ntitle: native\n---\n\nA native note")
+        var linked: Set<Int64> = []
+        editor.commentAnnotator.configure(
+            annotations([
+                CommentQuote(threadID: 10, quote: "native"),
+                CommentQuote(threadID: 20, quote: "title: native"),
+                CommentQuote(threadID: 30, quote: "missing"),
+                CommentQuote(threadID: 40, quote: "native note"),
+            ], linked: { linked = $0 }))
+        await editor.commentAnnotator.publication?.value
+        #expect(linked == [40])
+        #expect(
+            editor.textView.textStorage.attribute(
+                CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) == nil)
+        editor.setShowsFrontMatter(true)
+        await editor.commentAnnotator.publication?.value
+        #expect(linked == [20, 40])
+        #expect(
+            editor.textView.textStorage.attribute(
+                CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) != nil)
+    }
+
+    @Test func annotationsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
+        let editor = MarkdownEditor(text: "A native note")
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        let annotated = {
+            view.textStorage.attribute(CommentAnnotator.annotationKey, at: 3, effectiveRange: nil)
+                != nil
+        }
+        editor.commentAnnotator.configure(
+            annotations([CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        #expect(annotated())
+        editor.textViewWritingToolsWillBegin(view)
+        #expect(editor.isWritingToolsActive)
+        #expect(!annotated())
+        editor.textViewWritingToolsDidEnd(view)
+        editor.highlight()
+        #expect(annotated())
+
+        let interaction = try #require(view.findInteraction)
+        interaction.presentFindNavigator(showingReplace: false)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        await editor.commentAnnotator.pendingFindUpdate?.value
+        #expect(interaction.isFindNavigatorVisible)
+        #expect(!annotated())
+        interaction.dismissFindNavigator()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        await editor.commentAnnotator.pendingFindUpdate?.value
+        #expect(!interaction.isFindNavigatorVisible)
+        #expect(annotated())
+        #expect(editor.document.text == "A native note")
+        #expect(editor.generation == 0)
+    }
+
+    @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
+        let editor = MarkdownEditor(text: "A native note")
+        let provider: any AXCustomContentProvider = editor.textView
+        editor.commentAnnotator.configure(
+            annotations(
+                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        let content = try #require(provider.accessibilityCustomContent.first)
+        #expect(content.label == "Selected Comment")
+        #expect(content.value == "native")
+        #expect(content.importance == .high)
+        editor.commentAnnotator.configure(nil)
+        #expect(provider.accessibilityCustomContent.isEmpty)
+    }
+
+    private func annotations(
+        _ quotes: [CommentQuote], selectedThreadID: Int64? = nil, showsInlineComments: Bool = true,
+        open: @escaping @MainActor ([Int64]) -> Void = { _ in },
+        linked: @escaping @MainActor (Set<Int64>) -> Void = { _ in },
+        add: @escaping @MainActor (String) -> Void = { _ in }
+    ) -> CommentAnnotations {
+        CommentAnnotations(
+            quotes: quotes, selectedThreadID: selectedThreadID, showsInlineComments: showsInlineComments,
+            open: open, linked: linked, add: add)
+    }
+}

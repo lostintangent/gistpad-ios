@@ -128,15 +128,15 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
 .prose section.footnotes li { font-size: var(--gp-footnote-size); line-height: var(--gp-footnote-line-height); }
 .markdown-container ::selection { background: revert; color: revert; }
 .comment-text { display: contents; }
-.comment-highlight[data-comment-ids] {
+.comment-annotation[data-comment-ids] {
   background: var(--comment-idle);
   border-radius: 3px;
   box-shadow: 1px 0 var(--comment-idle), -1px 0 var(--comment-idle);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
-.comment-highlight[data-comment-ids][role="button"] { cursor: pointer; }
-.comment-highlight[data-comment-ids]:focus-visible { outline: 2px solid var(--gp-accent-text); outline-offset: 2px; }
+.comment-annotation[data-comment-ids][role="button"] { cursor: pointer; }
+.comment-annotation[data-comment-ids]:focus-visible { outline: 2px solid var(--gp-accent-text); outline-offset: 2px; }
 .comment-selected-run[data-comment-run] {
   background: var(--gp-accent-fill);
   border-radius: 3px;
@@ -144,7 +144,7 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
-.comment-highlight.comment-selected[data-comment-ids] {
+.comment-annotation.comment-selected[data-comment-ids] {
   background: none;
   border-radius: 0;
   box-shadow: none;

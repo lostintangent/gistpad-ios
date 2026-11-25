@@ -5,7 +5,7 @@ final class CommentsUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
     func testOpeningAndClosingCommentsKeepsThePreviewInPlace() throws {
-        let app = launchGistPad(open: "highlights", mode: "preview")
+        let app = launchGistPad(open: "comments", mode: "preview")
         let late = app.buttons["A late native passage"].firstMatch
         try waitUntil("the Preview") { app.webViews.firstMatch.exists && late.exists }
         // With the sidebar hidden, Comments is the only thing that changes the reading width.
@@ -33,7 +33,7 @@ final class CommentsUITests: XCTestCase {
     }
 
     func testPostingAndReplying() throws {
-        let app = launchGistPad(open: "highlights", mode: "preview", sheet: "comments")
+        let app = launchGistPad(open: "comments", mode: "preview", sheet: "comments")
         let composer = app.element("comment-composer-text")
         try waitUntil("Comments") { app.element("comment-thread-1").exists && composer.exists }
 
@@ -55,7 +55,7 @@ final class CommentsUITests: XCTestCase {
     }
 
     func testOnlyALongQuoteOffersTheFullQuote() throws {
-        let app = launchGistPad(open: "highlights", mode: "preview", sheet: "comments")
+        let app = launchGistPad(open: "comments", mode: "preview", sheet: "comments")
         try waitUntil("Comments") { app.element("comment-thread-1").exists }
         XCTAssertFalse(app.element("comment-thread-1").buttons["Show Full Quote"].exists)
 
@@ -68,10 +68,10 @@ final class CommentsUITests: XCTestCase {
         try waitUntil("the quote folded again") { long.buttons["Show Full Quote"].exists }
     }
 
-    func testTappingAHighlightSelectsItsThread() throws {
-        let app = launchGistPad(open: "highlights", mode: "preview")
+    func testTappingAnAnnotationSelectsItsThread() throws {
+        let app = launchGistPad(open: "comments", mode: "preview")
         let careful = app.buttons["careful"].firstMatch
-        try waitUntil("the highlight") { careful.isTappable }
+        try waitUntil("the annotation") { careful.isTappable }
         app.dismissSidebarOverlay()
         careful.tap()
         let thread = app.element("comment-thread-2")

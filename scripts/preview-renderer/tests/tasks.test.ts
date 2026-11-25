@@ -19,11 +19,11 @@ test("task markers address the correct duplicate after emoji and CRLF", async ()
     "[ ]", "[x]", "[ ]", "[X]", "[ ]",
   ]);
   expect(markers[1]).toBe(markdown.indexOf("[x]"));
-  const annotated: number[] = [];
+  const located: number[] = [];
   visit(tree, "element", (node) => {
-    if (typeof node.properties.dataTaskLocation === "number") annotated.push(node.properties.dataTaskLocation);
+    if (typeof node.properties.dataTaskLocation === "number") located.push(node.properties.dataTaskLocation);
   });
-  expect(annotated).toEqual(markers);
+  expect(located).toEqual(markers);
 });
 
 test("raw HTML cannot forge an editable task", async () => {

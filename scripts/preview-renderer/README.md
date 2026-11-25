@@ -21,17 +21,17 @@ Two adapters keep the web's code offline and native:
 
 ## Security
 
-HTML is sanitized before Contents, slugs and task annotation, so scripts, forms, frames, event handlers and arbitrary styles never reach the page. The CSP allows only bundled scripts, styles and fonts, with no network connections, objects or frames. HTTPS and data images load with no referrer and show a fallback when they fail. No tokens or session objects enter WebKit.
+HTML is sanitized before Contents, slugs and task locations are added, so scripts, forms, frames, event handlers and arbitrary styles never reach the page. The CSP allows only bundled scripts, styles and fonts, with no network connections, objects or frames. HTTPS and data images load with no referrer and show a fallback when they fail. No tokens or session objects enter WebKit.
 
 ## Bridge
 
-The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
+The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `commentSegments`, `commentSelection` and `setCommentAnnotations`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
 
 Each render carries a generation that every message repeats, and native accepts messages only from the bundle's main frame and the latest render. A task toggle names only the UTF-16 location of its marker, and the native document makes the edit, so a location that isn't a box is rejected. `allowsTaskEdits` travels with each render, so read-only checkboxes never emit edits. Links must be http, https or mailto.
 
 ## Comments
 
-Quote matching in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page draws the returned ranges. A tapped highlight sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. A selected passage opens its enclosing disclosures and scrolls into view.
+Quote matching in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page annotates the returned ranges. A tapped annotation sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. A selected passage opens its enclosing disclosures and scrolls into view.
 
 ## Scrolling and appearance
 
@@ -45,4 +45,4 @@ Appearance travels apart from Markdown, as CSS variables that `PreviewAppearance
 - `swift test --filter PreviewTests` runs the bridge tests on macOS.
 - On the simulator, the app-hosted `PreviewWebKitTests` load the all-syntax fixture through the real resource scheme, keep the reading position across width and inset changes, and render again after the web process dies.
 
-`FixtureLibrary`'s `allSyntax`, `readingPolish` and `listMarkers` notes seed the `guide`, `shape` and `words` gists in the `standard` fixture, and only DEBUG builds carry them. `--fixture standard --open highlights` shows comment highlights in the app. WebKit test snapshots aren't visual evidence, so capture the app with `scripts/capture-matrix.sh`.
+`FixtureLibrary`'s `allSyntax`, `readingPolish` and `listMarkers` notes seed the `guide`, `shape` and `words` gists in the `standard` fixture, and only DEBUG builds carry them. `--fixture standard --open comments` shows comment annotations in the app. WebKit test snapshots aren't visual evidence, so capture the app with `scripts/capture-matrix.sh`.

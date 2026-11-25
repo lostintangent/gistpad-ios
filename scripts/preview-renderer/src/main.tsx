@@ -3,21 +3,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Preview, PreviewErrorBoundary } from "./Preview";
 import { send, type RenderRequest } from "./protocol";
 import { setAppearance } from "./appearance";
-import { CommentHighlightController } from "./commentHighlights";
+import { CommentAnnotationController } from "./commentAnnotations";
 import "../../../../gistpad.dev/src/features/markdown/index.css";
 import "./style.css";
 
 const root = createRoot(document.getElementById("root")!);
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 // Native asks about comments only after the page reports a render.
-let comments: CommentHighlightController;
+let comments: CommentAnnotationController;
 window.gistpadPreview = Object.freeze({
   setAppearance,
   commentSegments: () => comments.catalog(),
   commentSelection: () => comments.selection(),
-  setCommentHighlights: (value) => comments.setHighlights(value),
+  setCommentAnnotations: (value) => comments.setAnnotations(value),
   render(request: RenderRequest) {
-    comments = new CommentHighlightController(request);
+    comments = new CommentAnnotationController(request);
     root.render(
       <QueryClientProvider client={queryClient}>
         <PreviewErrorBoundary request={request}>
