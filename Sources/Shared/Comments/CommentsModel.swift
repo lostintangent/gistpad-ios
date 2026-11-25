@@ -92,9 +92,9 @@ public final class CommentsModel {
             case .root:
                 try await create(draft)
             case .quote(let quote, _):
-                try await create(GistCommentBody.quoting(quote, text: draft))
+                try await create(GistCommentBody(quoting: quote, text: draft).markdown)
             case .reply(let parentID):
-                try await create(GistCommentBody.replying(to: parentID, text: draft))
+                try await create(GistCommentBody(replyingTo: parentID, text: draft).markdown)
             case .edit(let comment):
                 let updated = try await github.updateComment(
                     gistID: gistID, commentID: comment.id,

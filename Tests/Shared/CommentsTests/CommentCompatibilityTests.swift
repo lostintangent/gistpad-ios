@@ -57,12 +57,12 @@ struct CommentCompatibilityFixtures: Decodable {
     }
 
     @Test func createsWebCompatibleQuoteAndReplyBodies() {
-        let quoted = GistCommentBody.quoting("first line\nsecond line", text: "Feedback")
-        #expect(quoted == "> first line\nsecond line\n\nFeedback")
-        #expect(GistCommentBody(quoted).quote == "first line")
-        #expect(GistCommentBody(quoted).text == "second line\n\nFeedback")
-        let reply = GistCommentBody.replying(to: 123, text: "Reply")
-        #expect(reply == "> [comment:123]\n\nReply")
-        #expect(GistCommentBody(reply).parentID == 123)
+        let quoted = GistCommentBody(quoting: "first line\nsecond line", text: "Feedback")
+        #expect(quoted.markdown == "> first line\nsecond line\n\nFeedback")
+        #expect(quoted.quote == "first line")
+        #expect(quoted.text == "second line\n\nFeedback")
+        let reply = GistCommentBody(replyingTo: 123, text: "Reply")
+        #expect(reply.markdown == "> [comment:123]\n\nReply")
+        #expect(reply.parentID == 123)
     }
 }

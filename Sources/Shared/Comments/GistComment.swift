@@ -50,12 +50,15 @@ public struct GistComment: Codable, Equatable, Identifiable, Sendable {
 /// (`> quoted text` or `> [comment:123]`). That line and the blank lines after it are its prefix,
 /// which stays hidden while the comment is displayed or edited.
 public struct GistCommentBody: Equatable, Sendable {
+    /// The body GitHub stores, prefix included.
+    public let markdown: String
     let prefix: String
     public let quote: String?
     let parentID: Int64?
     public let text: String
 
     init(_ body: String) {
+        markdown = body
         let firstLine = String(String.UnicodeScalarView(body.unicodeScalars.prefix { $0 != "\n" }))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard firstLine.hasPrefix(">"),
@@ -75,13 +78,14 @@ public struct GistCommentBody: Equatable, Sendable {
         }
     }
 
+    /// A new comment on a passage of the file.
+    public init(quoting quote: String, text: String) {
+        self.init("> \(quote)\n\n\(text)")
+    }
+
+    public init(replyingTo parentID: Int64, text: String) {
+        self.init("> [comment:\(parentID)]\n\n\(text)")
+    }
+
     func replacingText(with text: String) -> String { prefix + text }
-
-    public static func quoting(_ quote: String, text: String) -> String {
-        "> \(quote)\n\n\(text)"
-    }
-
-    public static func replying(to parentID: Int64, text: String) -> String {
-        "> [comment:\(parentID)]\n\n\(text)"
-    }
 }

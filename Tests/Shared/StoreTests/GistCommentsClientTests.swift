@@ -39,8 +39,8 @@ import Testing
 
     @Test func createsUpdatesAndDeletesWithExactWireBodies() async throws {
         let calls = Mutex<[String]>([])
-        let quoted = GistCommentBody.quoting("A **quoted** passage", text: "Comment\n\nBody")
-        let reply = GistCommentBody.replying(to: 123, text: "Reply")
+        let quoted = GistCommentBody(quoting: "A **quoted** passage", text: "Comment\n\nBody").markdown
+        let reply = GistCommentBody(replyingTo: 123, text: "Reply").markdown
         let session = FixtureServer { request in
             calls.withLock { $0.append("\(request.httpMethod!) \(request.url!.path)") }
             switch request.httpMethod {

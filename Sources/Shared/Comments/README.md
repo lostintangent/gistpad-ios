@@ -8,7 +8,7 @@ let highlights = quotes.highlights(in: [source])
 ```
 
 - `GistComment` is GitHub's comment value. `canEdit(as:)` allows the author. `canDelete(as:gistOwnerID:)` allows the author and the gist owner.
-- `parsedBody` splits off the hidden prefix: a first line that starts with `>` and the blank lines after it. `> [comment:ID]` makes the comment a reply. Any other `>` line is a quote. `GistCommentBody.quoting(_:text:)` and `replying(to:text:)` write the web's format, and an edit keeps the prefix.
+- `parsedBody` splits off the hidden prefix: a first line that starts with `>` and the blank lines after it. `> [comment:ID]` makes the comment a reply. Any other `>` line is a quote. `GistCommentBody(quoting:text:)` and `GistCommentBody(replyingTo:text:)` write the web's format into `markdown`, the body GitHub stores, and an edit keeps the prefix.
 - `threads` on `CommentsModel` sorts newest first and keeps input order for ties. A reply whose parent is missing becomes its own thread. `canReply` stops at depth 2.
 - `highlights(in:)` on `[CommentQuote]` links a quote of at least 3 UTF-16 units that appears exactly once, as whole ASCII words, across all segments. It returns UTF-16 ranges per segment. Overlapping quotes split into pieces that list every thread ID. The editor passes the source as one segment. Preview passes each rendered text node outside `pre`, `code` and `svg`. `CommentQuote.isQuotable(_:)` needs 4 units before a selection can become a quote.
 - `CommentHighlightConfiguration` carries the quotes, the selected comment and the inline toggle to the editor and Preview, and `CommentHighlightActions` carries what a passage does when it's tapped, verified or quoted. Nil actions mean the file has no comments.
