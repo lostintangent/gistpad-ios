@@ -11,10 +11,10 @@ struct CommentHighlightTests {
         let editor = MarkdownEditor(text: "A native note\n")
         let window = try host(editor)
         defer { window.isHidden = true }
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
         editor.textView.layoutIfNeeded()
-        #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
+        #expect(editor.commentHighlighter.backgroundLayer.sublayers?.isEmpty == false)
         editor.textView.selectedRange = NSRange(location: editor.document.text.utf16.count, length: 0)
         editor.textView.insertText("- ")
         editor.textView.layoutIfNeeded()
@@ -27,8 +27,8 @@ struct CommentHighlightTests {
             ink.resolvedColor(with: traits).isEqual(
                 UIColor.secondaryLabel.resolvedColor(with: traits)))
         #expect(
-            storage.attribute(CommentHighlights.annotationKey, at: 2, effectiveRange: nil) != nil)
-        #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
+            storage.attribute(CommentHighlighter.annotationKey, at: 2, effectiveRange: nil) != nil)
+        #expect(editor.commentHighlighter.backgroundLayer.sublayers?.isEmpty == false)
     }
 
     @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
@@ -42,7 +42,7 @@ struct CommentHighlightTests {
         let selection = editor.textView.selectedRange
         var changes = 0
         editor.onEdit = { _, _ in changes += 1 }
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(
                 quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         editor.highlight()
@@ -65,14 +65,14 @@ struct CommentHighlightTests {
     @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
         let editor = MarkdownEditor(text: "one two three")
         var opened: [[Int64]] = []
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(quotes: [
                 CommentQuote(threadID: 10, quote: "one two"),
                 CommentQuote(threadID: 20, quote: "two three"),
             ]), actions: actions(open: { opened.append($0) }))
         #expect(
             editor.textView.textStorage.attribute(
-                CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
+                CommentHighlighter.annotationKey, at: 5, effectiveRange: nil) != nil)
         #expect(
             editor.textView.textStorage.attribute(.textHighlightStyle, at: 5, effectiveRange: nil)
                 == nil)
@@ -106,7 +106,7 @@ struct CommentHighlightTests {
         let window = try host(editor, focused: false)
         defer { window.isHidden = true }
         var quotes: [String] = []
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(quotes: [
                 CommentQuote(threadID: 10, quote: "quiet native"),
                 CommentQuote(threadID: 20, quote: "native note"),
@@ -121,7 +121,7 @@ struct CommentHighlightTests {
             for: try #require(editor.textView.textRange(from: start, to: end)))
         #expect(!frame.isEmpty)
         #expect(
-            editor.commentHighlights.threadIDs(
+            editor.commentHighlighter.threadIDs(
                 at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
             "Native frame \(frame), container inset \(editor.textView.textContainerInset)")
 
@@ -158,18 +158,18 @@ struct CommentHighlightTests {
         var configuration = CommentHighlightConfiguration(
             quotes: [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60
         )
-        editor.commentHighlights.configure(configuration)
-        await editor.commentHighlights.scrollTask?.value
+        editor.commentHighlighter.configure(configuration)
+        await editor.commentHighlighter.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
         editor.textView.setContentOffset(top, animated: false)
-        editor.commentHighlights.configure(configuration)
+        editor.commentHighlighter.configure(configuration)
         editor.textView.layoutIfNeeded()
-        #expect(editor.commentHighlights.scrollTask == nil)
+        #expect(editor.commentHighlighter.scrollTask == nil)
         #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
         configuration.revealRevision += 1
-        editor.commentHighlights.configure(configuration)
-        await editor.commentHighlights.scrollTask?.value
+        editor.commentHighlighter.configure(configuration)
+        await editor.commentHighlighter.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         #expect(editor.document.text == text)
         #expect(editor.generation == 0)
@@ -181,7 +181,7 @@ struct CommentHighlightTests {
         #expect(
             editor.textView(
                 editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        editor.commentHighlights.configure(.init(), actions: actions())
+        editor.commentHighlighter.configure(.init(), actions: actions())
         #expect(
             editor.textView(
                 editor.textView,
@@ -202,7 +202,7 @@ struct CommentHighlightTests {
 
     @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
         let editor = MarkdownEditor(text: "one two three")
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(
                 quotes: [
                     CommentQuote(threadID: 10, quote: "one two"),
@@ -211,10 +211,10 @@ struct CommentHighlightTests {
             actions: actions())
         #expect(
             editor.textView.textStorage.attribute(
-                CommentHighlights.annotationKey, at: 1, effectiveRange: nil) == nil)
+                CommentHighlighter.annotationKey, at: 1, effectiveRange: nil) == nil)
         #expect(
             editor.textView.textStorage.attribute(
-                CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
+                CommentHighlighter.annotationKey, at: 5, effectiveRange: nil) != nil)
         let menu = editor.textView(
             editor.textView,
             editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
@@ -225,24 +225,24 @@ struct CommentHighlightTests {
     @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
         let editor = MarkdownEditor(text: "---\ntitle: native\n---\n\nA native note")
         var linked: Set<Int64> = []
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(quotes: [
                 CommentQuote(threadID: 10, quote: "native"),
                 CommentQuote(threadID: 20, quote: "title: native"),
                 CommentQuote(threadID: 30, quote: "missing"),
                 CommentQuote(threadID: 40, quote: "native note"),
             ]), actions: actions(linked: { linked = $0 }))
-        await editor.commentHighlights.publication?.value
+        await editor.commentHighlighter.publication?.value
         #expect(linked == [40])
         #expect(
             editor.textView.textStorage.attribute(
-                CommentHighlights.annotationKey, at: 5, effectiveRange: nil) == nil)
+                CommentHighlighter.annotationKey, at: 5, effectiveRange: nil) == nil)
         editor.setShowsFrontMatter(true)
-        await editor.commentHighlights.publication?.value
+        await editor.commentHighlighter.publication?.value
         #expect(linked == [20, 40])
         #expect(
             editor.textView.textStorage.attribute(
-                CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
+                CommentHighlighter.annotationKey, at: 5, effectiveRange: nil) != nil)
     }
 
     @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
@@ -251,10 +251,10 @@ struct CommentHighlightTests {
         defer { window.isHidden = true }
         let view = editor.textView
         let annotated = {
-            view.textStorage.attribute(CommentHighlights.annotationKey, at: 3, effectiveRange: nil)
+            view.textStorage.attribute(CommentHighlighter.annotationKey, at: 3, effectiveRange: nil)
                 != nil
         }
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         #expect(annotated())
         editor.textViewWritingToolsWillBegin(view)
@@ -268,13 +268,13 @@ struct CommentHighlightTests {
         interaction.presentFindNavigator(showingReplace: false)
         view.setNeedsLayout()
         view.layoutIfNeeded()
-        await editor.commentHighlights.pendingFindUpdate?.value
+        await editor.commentHighlighter.pendingFindUpdate?.value
         #expect(interaction.isFindNavigatorVisible)
         #expect(!annotated())
         interaction.dismissFindNavigator()
         view.setNeedsLayout()
         view.layoutIfNeeded()
-        await editor.commentHighlights.pendingFindUpdate?.value
+        await editor.commentHighlighter.pendingFindUpdate?.value
         #expect(!interaction.isFindNavigatorVisible)
         #expect(annotated())
         #expect(editor.document.text == "A native note")
@@ -284,14 +284,14 @@ struct CommentHighlightTests {
     @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
         let editor = MarkdownEditor(text: "A native note")
         let provider: any AXCustomContentProvider = editor.textView
-        editor.commentHighlights.configure(
+        editor.commentHighlighter.configure(
             .init(
                 quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         let content = try #require(provider.accessibilityCustomContent.first)
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        editor.commentHighlights.configure(.init())
+        editor.commentHighlighter.configure(.init())
         #expect(provider.accessibilityCustomContent.isEmpty)
     }
 

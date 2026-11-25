@@ -18,7 +18,9 @@ let package = Package(
     targets: [
         .target(name: "Appearance", path: "Sources/Shared/Appearance"),
         .target(name: "Comments", path: "Sources/Shared/Comments", exclude: ["README.md"]),
-        .target(name: "Markdown", path: "Sources/Shared/Markdown", resources: [.process("Resources")]),
+        .target(
+            name: "Markdown", path: "Sources/Shared/Markdown", exclude: ["README.md"],
+            resources: [.process("Resources")]),
         .target(
             name: "Store", dependencies: ["Comments", .product(name: "Auth", package: "supabase-swift")],
             path: "Sources/Shared/Store", exclude: ["README.md"]),

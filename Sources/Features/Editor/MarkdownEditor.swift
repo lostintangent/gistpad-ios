@@ -25,7 +25,7 @@
         @ObservationIgnored private var isHighlighting = false
         /// A caret placed by a focus request, waiting for the text view to reach a window.
         @ObservationIgnored public private(set) var isFocusPending = false
-        @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
+        @ObservationIgnored lazy var commentHighlighter = CommentHighlighter(editor: self)
 
         public init(
             text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
@@ -60,7 +60,7 @@
             }
             textView.registerForTraitChanges([AccentTrait.self]) {
                 (view: TextView, _: UITraitCollection) in
-                view.editor?.commentHighlights.accentDidChange()
+                view.editor?.commentHighlighter.accentDidChange()
             }
             updateHiddenFrontMatter()
             textView.selectedRange = NSRange(location: contentStart, length: 0)
@@ -227,7 +227,7 @@
 
         public func find(replacing: Bool = false) {
             guard isSettled else { return inputError = .unsettled }
-            commentHighlights.suspendForFind()
+            commentHighlighter.suspendForFind()
             textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
         }
 
@@ -239,7 +239,7 @@
             let document = shownDocument
             textView.updateAttributes { storage in
                 style.paint(document, in: storage)
-                commentHighlights.paint(in: storage)
+                commentHighlighter.paint(in: storage)
             }
             textView.typingAttributes = style.typingAttributes
         }
@@ -280,7 +280,7 @@
             commitComposition()
             showsFrontMatter = value
             updateHiddenFrontMatter()
-            commentHighlights.frontMatterVisibilityDidChange()
+            commentHighlighter.frontMatterVisibilityDidChange()
         }
 
         public func textContentManager(
@@ -348,19 +348,19 @@
             }
             isComposing = textView.markedTextRange != nil
             if isComposing { textView.cancelEditingCaretReveal() }
-            commentHighlights.selectionDidChange()
+            commentHighlighter.selectionDidChange()
         }
 
         public func textViewWritingToolsWillBegin(_: UITextView) {
             synchronizeText()
-            commentHighlights.suspendForWritingTools()
+            commentHighlighter.suspendForWritingTools()
             isWritingToolsActive = true
             textView.cancelEditingCaretReveal()
         }
 
         public func textViewWritingToolsDidEnd(_: UITextView) {
             isWritingToolsActive = false
-            commentHighlights.resumeAfterWritingTools()
+            commentHighlighter.resumeAfterWritingTools()
             synchronizeText()
             textView.rememberReadingAnchor()
         }
@@ -393,7 +393,7 @@
             _ textView: UITextView, editMenuForTextInRanges ranges: [NSValue],
             suggestedActions: [UIMenuElement]
         ) -> UIMenu? {
-            commentHighlights.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
+            commentHighlighter.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
         }
     }
 #endif

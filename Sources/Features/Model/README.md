@@ -23,7 +23,7 @@ GistFile                          a file as it is on this iPhone
   gist  filename  draft?  published?  text  nextDraft
 
 GistFileEditor                    a file you've opened
-  file: GistFile  editor: Editor  mode  status
+  file: GistFile  editor: MarkdownEditor  mode  status
 ```
 
 ## Three kinds of file
@@ -34,7 +34,7 @@ GistFileEditor                    a file you've opened
   new gist or day carries its draft in memory until there's something in it.
   `id` is fixed when the file opens, so a rename or a new gist's first publish
   keeps its editor. `nextDraft` is the draft your next keystroke saves.
-- `GistFileEditor` wraps the Markdown `Editor` with the gist part: saving each
+- `GistFileEditor` wraps the `MarkdownEditor` with the gist part: saving each
   keystroke, autosave, publishing, preview or edit mode, and `status`. The model
   keeps one per file opened since launch, so returning to a file keeps your
   place and your undo.

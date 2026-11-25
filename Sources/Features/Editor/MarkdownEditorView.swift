@@ -96,7 +96,7 @@
                     if view.isFirstResponder { view.reloadInputViews() }
                 }
                 view.traitOverrides[AccentTrait.self] = accent
-                editor.commentHighlights.configure(comments, actions: commentActions)
+                editor.commentHighlighter.configure(comments, actions: commentActions)
             }
             host.isPaneVisible = isPaneVisible
         }
@@ -172,7 +172,7 @@
             configuration = nil
             updateOwnership()
             guard editor.host == nil, editor.textView.superview === self else { return }
-            editor.commentHighlights.configure(.init())
+            editor.commentHighlighter.configure(.init())
             editor.textView.inputAccessoryView = nil
             editor.textView.removeFromSuperview()
         }

@@ -26,7 +26,7 @@ note in its gist's `GistFolderEntity`, under the active `GistAccountEntity`.
 RootView names the displayed file as the entity of the editor, the preview and
 a foreground `NSUserActivity`. Only a query for that note while GistPad is
 active gets its live body, which the bridge reads from the editor with front
-matter stripped by `Syntax.contentStart(in:)`. Spotlight and the shared
+matter stripped, as `MarkdownDocument.body`. Spotlight and the shared
 snapshot keep titles and snippets but **never full bodies**. Siri answering
 questions from the displayed body remains unproven until a phone test.
 

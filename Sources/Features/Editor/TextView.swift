@@ -339,7 +339,7 @@
         }
 
         override func layoutSubviews() {
-            editor?.commentHighlights.findVisibilityDidChange()
+            editor?.commentHighlighter.findVisibilityDidChange()
             applyKeyboardInset()
             let needsInitialAnchor = previousWidth == 0
             if writingToolsOwnsScrolling {
@@ -376,8 +376,8 @@
                 layoutDocument()
                 rememberReadingAnchor()
             }
-            editor?.commentHighlights.layoutBackgrounds()
-            editor?.commentHighlights.scrollSelectedCommentIfNeeded()
+            editor?.commentHighlighter.layoutBackgrounds()
+            editor?.commentHighlighter.scrollSelectedCommentIfNeeded()
         }
 
         // Platform gap: TextKit 2 estimates the height of text it hasn't laid out, which leaves scroll

@@ -77,7 +77,7 @@ extension MarkdownDocument {
     }
 
     /// Every span in the note.
-    public var spans: [Span] { spans(in: NSRange(location: 0, length: source.length)) }
+    public var spans: [Span] { spans(in: range) }
 
     /// The spans of the whole lines in `range`, with every literal and prose run it touches whole.
     /// Later spans paint over earlier ones.

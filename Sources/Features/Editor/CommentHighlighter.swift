@@ -5,7 +5,7 @@
     import Markdown
     import UIKit
 
-    final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
+    final class CommentHighlighter: NSObject, UIGestureRecognizerDelegate {
         static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
         private unowned let editor: MarkdownEditor
         let backgroundLayer = CALayer()

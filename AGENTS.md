@@ -148,13 +148,14 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/App/Platform` | `PlatformBridge` and App Shortcuts, which connect the model to intents, widgets and Spotlight. |
 | `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
-| `Sources/Features/Editor` | `Editor` and its TextKit 2 text view, `EditorView`, `KeyboardBar`, formatting, smart typing, highlighting, front matter and comment highlights. |
+| `Sources/Features/Editor` | `MarkdownEditor` and its TextKit 2 text view, `MarkdownEditorView`, `KeyboardBar`, highlighting, hidden front matter and the `CommentHighlighter`. |
 | `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model, foldered as `Ask`, `Edit` and `Review`, the `Model` they share and the `Sheet`. |
 | `Sources/Features/Model` | `GistPadModel`, `GistFile` and `GistFileEditor`: the account, the list, the files you've opened and every verb, one file per scenario. |
 | `Sources/Features/Screens` | The views, foldered by capability: `Library` with the Today button, `Gist` with renaming, `Tags`, and `Settings` with the account. The GitHub status control and toolbar toggles both screens use stay at the root. |
 | `Sources/Features/Platform` | App Intents and Siri's notes schema, Spotlight, the widget view and `gistpad://` links, a file for each system surface. |
 | `Sources/Features/Preview` | The offline WebKit Markdown preview and its bridge. |
 | `Sources/Shared/Appearance` | The personal accent color, its trait and `.accent(savedHex:)` modifier, and the `isPaneVisible` environment value. |
+| `Sources/Shared/Markdown` | `MarkdownDocument`, a note's Markdown read once, and `MarkdownEdit`, every change to it: typing, formatting, tasks and replacements. |
 | `Sources/Shared/Comments` | Comment bodies, threads, quotes and their highlights, and `CommentsModel`. |
 | `Sources/Shared/Store` | The nouns and where they're kept: gists, the GitHub client, drafts, the cache, the account and its preferences, photo storage and the DEBUG fixture GitHub. |
 | `Tests/App` | App-hosted tests, foldered by the capability they cover, and every test that needs a window, such as Editor's focus, formatting and layout tests in `Editor`. |
@@ -162,4 +163,4 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
 
-Comments, Model, Platform, Screens and Store document their APIs in a README beside their sources.
+Comments, Markdown, Model, Platform, Screens and Store document their APIs in a README beside their sources.
