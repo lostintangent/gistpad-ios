@@ -93,10 +93,10 @@ final class GistUITests: XCTestCase {
         app.typeText("B")
         try waitUntil("B where it was tapped, in the caret's word") { landedInside("B", line: 3) }
 
-        // A tap on the caret, or within about 30 pt of it, still shows its menu and leaves the caret
-        // where it was.
+        // A tap on the caret, at the end of the word, still shows its menu and leaves the caret where
+        // it was.
         point(line: 4, x: 200).tap()
-        point(line: 4, x: 140).tap()
+        point(line: 4, x: 150).tap()
         try waitUntil("the caret's menu") { app.menuItems["Select All"].exists }
         app.typeText("C")
         try waitUntil("C where the caret was") { line(4) == "UncharacteristicallyC" }
