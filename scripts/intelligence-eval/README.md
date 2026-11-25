@@ -69,6 +69,11 @@ destination heading. Task operations still work without rewriting
 the note. If even one selected block cannot fit, report the error rather than
 silently truncating the source.
 
+Review cases seed one misspelling or doubled word in a short note and in each
+full-size note, and one short note has nothing to fix. A case passes when a
+suggestion anchors over every seeded passage and every suggestion anchors in
+the note. Review samples at temperature 0.2, so compare it across 10 repetitions.
+
 Favorite answers are graded on generated prose, not cited text or exact sentence
 equality. Deterministic checks require the expected work's name, a preference
 assertion and no alternative series in a favorite assertion. A separate greedy

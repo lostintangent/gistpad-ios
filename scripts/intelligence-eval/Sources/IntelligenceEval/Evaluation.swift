@@ -20,6 +20,8 @@ struct EvalCase: Codable, Sendable {
     /// Phrases a grounded answer can't contain, like a number the note never gives.
     var avoids: [String]?
     var editedRegion: EditedRegion?
+    /// Passages with a seeded problem, each of which a Review suggestion has to anchor over.
+    var reviewIssues: [String]?
 }
 
 struct EvalResult: Codable, Sendable {
@@ -131,32 +133,43 @@ enum Evaluator {
                             action == .review
                             ? try await engine.review(request) : try await engine.edit(request)
                         answerSeconds = elapsed()
-                        let application = try proposal.application(to: request.snapshot)
-                        proposed = application.source
-                        if let expected = item.expectedSource {
-                            passed =
-                                application.source.utf8.elementsEqual(expected.utf8)
-                                && proposal.omittedCount == 0
-                        } else if let region = item.editedRegion {
-                            expectationFailure =
-                                proposal.omittedCount > 0
-                                ? "omittedChanges" : region.failure(application.source, editing: item.source)
+                        if let issues = item.reviewIssues {
+                            // A review with nothing to apply is an answer, and the only right one for a clean note.
+                            do {
+                                proposed = try proposal.application(to: request.snapshot).source
+                            } catch IntelligenceError.noApplicableChanges {}
+                            expectationFailure = reviewFailure(
+                                issues: issues, in: item.source,
+                                anchored: proposal.changes.compactMap(\.range), omitted: proposal.omittedCount)
                             passed = expectationFailure == nil
-                            if let written = region.written(in: application.source) {
-                                do {
-                                    modelGrade = try await region.meaningGrade(
-                                        request: item.prompt, original: region.written(in: item.source) ?? "",
-                                        written: written)
-                                } catch {
-                                    modelGradeError = String(reflecting: type(of: error))
-                                }
-                            }
-                        } else if let addedText = item.addedTaskText {
-                            passed = addedTaskPasses(
-                                application: application, original: snapshot,
-                                expectedText: addedText, expectedList: item.addedTaskListTitle)
                         } else {
-                            passed = false
+                            let application = try proposal.application(to: request.snapshot)
+                            proposed = application.source
+                            if let expected = item.expectedSource {
+                                passed =
+                                    application.source.utf8.elementsEqual(expected.utf8)
+                                    && proposal.omittedCount == 0
+                            } else if let region = item.editedRegion {
+                                expectationFailure =
+                                    proposal.omittedCount > 0
+                                    ? "omittedChanges" : region.failure(application.source, editing: item.source)
+                                passed = expectationFailure == nil
+                                if let written = region.written(in: application.source) {
+                                    do {
+                                        modelGrade = try await region.meaningGrade(
+                                            request: item.prompt, original: region.written(in: item.source) ?? "",
+                                            written: written)
+                                    } catch {
+                                        modelGradeError = String(reflecting: type(of: error))
+                                    }
+                                }
+                            } else if let addedText = item.addedTaskText {
+                                passed = addedTaskPasses(
+                                    application: application, original: snapshot,
+                                    expectedText: addedText, expectedList: item.addedTaskListTitle)
+                            } else {
+                                passed = false
+                            }
                         }
                     }
                     result = record(
@@ -226,6 +239,20 @@ enum Evaluator {
             to: String(decoding: payload, as: UTF8.self), generating: FavoriteGrade.self,
             options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 128))
         return response.content.passes
+    }
+
+    /// Every seeded issue needs an anchored suggestion over it, and a clean note needs none at all.
+    static func reviewFailure(
+        issues: [String], in source: String, anchored: [NSRange], omitted: Int
+    ) -> String? {
+        let missed = issues.contains { issue in
+            let range = (source as NSString).range(of: issue)
+            return !anchored.contains { NSIntersectionRange($0, range).length > 0 }
+        }
+        if missed { return "issueMissed" }
+        if omitted > 0 { return "omittedChanges" }
+        if issues.isEmpty, !anchored.isEmpty { return "unwantedSuggestion" }
+        return nil
     }
 
     static func answerFailure(_ answer: String, for item: EvalCase) -> String? {

@@ -2,7 +2,7 @@ import Foundation
 
 package struct Proposal: Sendable {
     let snapshot: FileSnapshot
-    let changes: [Change]
+    package let changes: [Change]
     fileprivate let safetyInstruction: String?
 
     package var omittedCount: Int { changes.count(where: { $0.range == nil }) }
@@ -146,7 +146,7 @@ extension Proposal {
         /// The model's context around the quote, to tell repeats apart.
         var before = ""
         var after = ""
-        var range: NSRange?
+        package internal(set) var range: NSRange?
 
         var canApply: Bool {
             range != nil

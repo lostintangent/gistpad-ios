@@ -39,6 +39,12 @@ def exact(name, source, prompt, expected):
                       expectedSource=expected))
 
 
+def review(name, source, issues):
+    for issue in issues:
+        assert source.count(issue) == 1, issue
+    cases.append(dict(id=name, action="review", source=source, prompt="", reviewIssues=issues))
+
+
 def replacement(source, old, new):
     assert source.count(old) == 1, old
     return source.replace(old, new)
@@ -325,6 +331,17 @@ ask("ask-home-summary", home, "Summarize the decisions about the door and the ru
     [["door"], ["rug"], ["keep", "stays"]], words=None)
 ask("ask-home-unknown", home, "What is the quoted cost of a new door?",
     [["not ", "no ", "n't", "unknown"]], ["$"])
+
+# Each Review case seeds a misspelling or a doubled word that a suggestion has to anchor over.
+review("review-walk", "# Saturday walk\n\nTake teh river path.\nLeave at 9am and bring water.\n",
+       ["teh"])
+review("review-clean", "# Packing\n\nBring a jacket, a water bottle and the train tickets.\n", [])
+review("review-reading", replacement(reading, "I usually finish", "I usualy finish"), ["usualy"])
+review("review-daily", replacement(daily, "no discussion of", "no discusion of"), ["discusion"])
+review("review-essay", replacement(essay, "been measuring success", "been measureing success"),
+       ["measureing"])
+review("review-dogfood", replacement(dogfood, "had hidden the bug", "had hiden the bug"), ["hiden"])
+review("review-home", replacement(home, "make the kitchen", "make the the kitchen"), ["the the"])
 
 # The live question remains separate from the committed synthetic sources.
 for note, minimum, maximum in [
