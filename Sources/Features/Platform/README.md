@@ -40,8 +40,8 @@ rewrite or Q&A.
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts, and the
 last three are also controls. The Add to Today control opens the capture
 sheet, and shortcut-provided text skips it. Captures start today the way the
-app does, append Store's `DailyNote.addition` through the same durable edit
-as Siri's append, and leave publishing to autosave.
+app does, append `MarkdownDocument`'s `edit(appendingParagraph:)` or
+`edit(appendingTasks:)` through the same durable edit as Siri's append, and leave publishing to autosave.
 
 Intents run in the main app (`allowedExecutionTargets = .main`), whose
 `GistPadActions` provides `PlatformActions` through `AppDependencyManager` and

@@ -41,7 +41,37 @@ struct MarkdownDocumentTests {
         #expect(blocks[0].level == 2)
         #expect(text.substring(with: try #require(blocks[2].prefix)) == "- [x] ")
         #expect(text.substring(with: try #require(blocks[2].box)) == "[x]")
-        #expect(document.taskMarkers == [try #require(blocks[2].box), text.range(of: "[ ]")])
+        #expect(document.tasks.compactMap(\.box) == [try #require(blocks[2].box), text.range(of: "[ ]")])
+    }
+
+    @Test(arguments: [
+        ("# Title", "Title"), ("  ##   Spaced   ##  ", "Spaced"), ("### a # b ###", "a # b"),
+        ("# a#", "a#"), ("## ##", ""), ("#", ""),
+    ])
+    func aHeadingsTitleDropsItsHashesAndSpaces(_ example: (String, String)) throws {
+        let document = MarkdownDocument(example.0)
+        let title = try #require(document.blocks.first?.title)
+        #expect((example.0 as NSString).substring(with: title) == example.1)
+    }
+
+    @Test func sectionsSplitBeforeEachHeading() {
+        let source = "---\ntitle: x\n---\nIntro\n\n# One\nText\n\n## Two\n- item\n"
+        let sections = MarkdownDocument(source).sections
+        #expect(sections.map(\.heading?.level) == [nil, 1, 2])
+        #expect(sections.map { (source as NSString).substring(with: $0.range) } == [
+            "Intro", "# One\nText", "## Two\n- item",
+        ])
+        #expect(MarkdownDocument("# Only").sections.map(\.heading?.kind) == [.heading])
+    }
+
+    @Test func appendingAddsAParagraphOrOneTaskPerLine() {
+        let paragraph = MarkdownDocument("# Today\n\nA thought").edit(appendingParagraph: "A second thought\n")
+        #expect(paragraph.result == "# Today\n\nA thought\n\nA second thought\n")
+        let tasks = MarkdownDocument(paragraph.result).edit(appendingTasks: "First task\n  \t\n日本語 👩🏽‍💻\n")
+        #expect(tasks.result == paragraph.result + "- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
+        #expect(MarkdownDocument("").edit(appendingTasks: "Task").result == "- [ ] Task\n")
+        #expect(MarkdownDocument("A\r\n").edit(appendingParagraph: "B").result == "A\r\n\r\nB\r\n")
+        #expect(MarkdownDocument("- [ ] A\r\n").edit(appendingTasks: "B").result == "- [ ] A\r\n- [ ] B\r\n")
     }
 
     @Test func headingsWithInlineCodeStillMarkTheirEntireLine() {

@@ -145,7 +145,9 @@ final class GistPadActions: PlatformActions {
             }
             // Today's file as you last saved it, started the same way the app starts today.
             let draft = try await self.current(try await self.model.today(target).nextDraft)
-            try await self.append(DailyNote.addition(text, asTask: asTask, after: draft.text), to: draft)
+            let document = MarkdownDocument(draft.text)
+            let addition = asTask ? document.edit(appendingTasks: text) : document.edit(appendingParagraph: text)
+            try await self.append(addition.replacement, to: draft)
             return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
                 ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
         }

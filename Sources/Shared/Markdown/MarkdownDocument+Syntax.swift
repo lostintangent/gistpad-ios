@@ -11,18 +11,32 @@ extension MarkdownDocument {
         /// Whole lines, without the last one's line break.
         public let range: NSRange
         public let level: Int?
+        /// A heading's text, without its hashes or the spaces around it.
+        public let title: NSRange?
         /// Everything before a list item's text: its indent, marker, spacing and box.
         public let prefix: NSRange?
         /// A task's box.
         public let box: NSRange?
 
-        init(_ kind: Kind, range: NSRange, level: Int? = nil, prefix: NSRange? = nil, box: NSRange? = nil) {
+        init(
+            _ kind: Kind, range: NSRange, level: Int? = nil, title: NSRange? = nil, prefix: NSRange? = nil,
+            box: NSRange? = nil
+        ) {
             self.kind = kind
             self.range = range
             self.level = level
+            self.title = title
             self.prefix = prefix
             self.box = box
         }
+    }
+
+    /// A heading and the blocks under it, up to the next heading of any level.
+    public struct Section: Sendable, Equatable {
+        /// Nil for the blocks before the note's first heading.
+        public let heading: Block?
+        /// Whole lines, from the section's first block through its last, without the last line break.
+        public let range: NSRange
     }
 
     /// A list item's line, quoted or not.
@@ -87,7 +101,10 @@ extension MarkdownDocument {
             for line in source.lines(in: run) {
                 let contents = line.contents
                 if let heading = Self.headingMarker.firstMatch(in: text, options: .anchored, range: contents) {
-                    finish(Block(.heading, range: contents, level: heading.range(at: 2).length))
+                    finish(
+                        Block(
+                            .heading, range: contents, level: heading.range(at: 2).length,
+                            title: title(of: heading, on: contents)))
                     finish()
                 } else if let item = listItem(on: line) {
                     finish(Block(.listItem, range: contents, prefix: item.prefix, box: item.box))
@@ -98,8 +115,8 @@ extension MarkdownDocument {
                         || (block.kind == .listItem && indentLength(of: line) > 0)
                 {
                     current = Block(
-                        block.kind, range: NSUnionRange(block.range, contents), level: block.level,
-                        prefix: block.prefix, box: block.box)
+                        block.kind, range: NSUnionRange(block.range, contents), prefix: block.prefix,
+                        box: block.box)
                 } else {
                     finish(Block(.paragraph, range: contents))
                 }
@@ -107,6 +124,29 @@ extension MarkdownDocument {
             finish()
         }
         return blocks.sorted { $0.range.location < $1.range.location }
+    }
+
+    /// The text after a heading's marker, up to its closing hashes and trailing spaces.
+    private func title(of marker: NSTextCheckingResult, on contents: NSRange) -> NSRange {
+        let hashes = NSMaxRange(marker.range(at: 2))
+        var end =
+            Self.headingClosing.firstMatch(in: text, range: NSRange(hashes..<NSMaxRange(contents)))?.range.location
+            ?? NSMaxRange(contents)
+        let start = min(NSMaxRange(marker.range), end)
+        while end > start, [32, 9].contains(source.character(at: end - 1)) { end -= 1 }
+        return NSRange(start..<end)
+    }
+
+    /// The note's sections in order. Blocks before the first heading make a section with no heading.
+    public var sections: [Section] {
+        blocks.reduce(into: []) { sections, block in
+            if block.kind == .heading || sections.isEmpty {
+                sections.append(Section(heading: block.kind == .heading ? block : nil, range: block.range))
+            } else {
+                let section = sections.removeLast()
+                sections.append(Section(heading: section.heading, range: NSUnionRange(section.range, block.range)))
+            }
+        }
     }
 
     /// The note's prose on one line, up to 160 characters: its paragraphs and the text of its list
@@ -127,16 +167,15 @@ extension MarkdownDocument {
         return excerpt.isEmpty ? nil : String(excerpt.prefix(160))
     }
 
-    /// Every task box outside code and front matter, quoted ones included.
-    public var taskMarkers: [NSRange] {
+    /// Every task outside code and front matter, quoted ones included: the list items with a box.
+    public var tasks: [ListItem] {
         proseRuns.flatMap { run in
             let code = inlineCode(in: run)
-            return Self.listMarker.matches(in: text, range: run).compactMap { match -> NSRange? in
-                let box = match.range(at: 7)
-                guard box.location != NSNotFound,
+            return source.lines(in: run).compactMap { line -> ListItem? in
+                guard let item = listItem(on: line, includingQuoted: true), let box = item.box,
                     !code.contains(where: { NSIntersectionRange($0, box).length > 0 })
                 else { return nil }
-                return box
+                return item
             }
         }
     }

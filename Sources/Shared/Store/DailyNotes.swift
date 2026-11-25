@@ -74,22 +74,6 @@ extension DailyNote {
     }
 }
 
-extension DailyNote {
-    /// What Add to Today appends to `source`: a paragraph, or with `asTask`, one task per line.
-    public static func addition(_ text: String, asTask: Bool, after source: String) -> String {
-        let content = asTask
-            ? text.split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .map { "- [ ] " + $0 }
-                .joined(separator: "\n")
-            : text.trimmingCharacters(in: .newlines)
-        let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
-            : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
-        return separator + content + "\n"
-    }
-}
-
 /// How many of a note's Markdown tasks are done. This matches the web's `- \[[ x]\]` exactly, so
 /// tasks count anywhere on a line and inside code fences, and only a lowercase `x` is checked.
 public struct TaskProgress: Equatable, Sendable {

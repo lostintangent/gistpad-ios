@@ -107,7 +107,6 @@ refresh rebuilds it.
 `DailyNote.Day` pins the date and time zone when an action starts.
 `DailyNote(cache:drafts:)` reads a day from the cache and drafts for the widget,
 and `TaskProgress` counts tasks with the web's markers.
-`DailyNote.addition` is what Add to Today appends: a paragraph or one task per line.
 
 `Date.dayRelative(to:locale:calendar:)` dates a change the way Notes lists it,
 against a reference day such as the library's today or a widget entry's date:

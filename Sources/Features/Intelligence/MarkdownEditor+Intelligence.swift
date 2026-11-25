@@ -12,7 +12,7 @@ extension FileSnapshot {
             sessionID: sessionID, generation: generation, source: source,
             headingOffsets: headings.map(\.location),
             tasks: ModelTask.indexed(
-                in: source, markers: document.taskMarkers, headings: headings))
+                in: source, markers: document.tasks.compactMap(\.box), headings: headings))
     }
 }
 
