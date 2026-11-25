@@ -36,7 +36,6 @@ struct OpenFailedView: View {
         } actions: {
             if let action = failure.action {
                 Button(action.title, action: recover)
-                    .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("note-open-retry")
             }
         }

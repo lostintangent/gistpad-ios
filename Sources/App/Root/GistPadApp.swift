@@ -48,7 +48,6 @@ struct GistPadApp: App {
                         Text(loadError)
                     } actions: {
                         Button("Try Again") { Task { await load() } }
-                            .buttonStyle(.borderedProminent)
                     }
                 } else if !Self.isHostingTests {
                     ProgressView()

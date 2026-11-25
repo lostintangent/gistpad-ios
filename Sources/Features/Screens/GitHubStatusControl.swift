@@ -81,13 +81,11 @@ public struct GitHubStatusControl: View {
     private func explanation(_ failure: Failure) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Couldn’t check for changes", bundle: .module)
+                Text("Couldn’t Check for Changes", bundle: .module)
                     .font(.headline)
                 Text(verbatim: failure.message)
                 if let action = failure.action {
                     Button(action.title, action: recover)
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
                         .accessibilityIdentifier("github-status-recover")
                 }
             }
