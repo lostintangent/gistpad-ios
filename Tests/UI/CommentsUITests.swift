@@ -2,12 +2,16 @@ import XCTest
 
 @MainActor
 final class CommentsUITests: XCTestCase {
+    /// A cold Preview launches WebKit's processes, and with accessibility on for UI testing, its first
+    /// page commits seconds later than it does for a reader.
+    private let firstRender: TimeInterval = 30
+
     override func setUp() { continueAfterFailure = false }
 
     func testOpeningAndClosingCommentsKeepsThePreviewInPlace() throws {
         let app = launchGistPad(open: "comments", mode: "preview")
         let late = app.buttons["A late native passage"].firstMatch
-        try waitUntil("the Preview") { app.webViews.firstMatch.exists && late.exists }
+        try waitUntil("the Preview", timeout: firstRender) { app.webViews.firstMatch.exists && late.exists }
         // With the sidebar hidden, Comments is the only thing that changes the reading width.
         app.dismissSidebarOverlay()
         let hideSidebar = app.buttons["Hide Sidebar"].firstMatch
@@ -71,7 +75,7 @@ final class CommentsUITests: XCTestCase {
     func testTappingAnAnnotationSelectsItsThread() throws {
         let app = launchGistPad(open: "comments", mode: "preview")
         let careful = app.buttons["careful"].firstMatch
-        try waitUntil("the annotation") { careful.isTappable }
+        try waitUntil("the annotation", timeout: firstRender) { careful.isTappable }
         app.dismissSidebarOverlay()
         careful.tap()
         let thread = app.element("comment-thread-2")
