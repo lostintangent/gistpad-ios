@@ -131,7 +131,7 @@ public struct SettingsSheet<Appearance: View>: View {
                 try await signOut()
                 dismiss()
             } catch {
-                saveError = error.localizedDescription
+                saveError = Failure(error).message
             }
         }
     }
@@ -152,7 +152,7 @@ public struct SettingsSheet<Appearance: View>: View {
                     do {
                         try await savePreference(key, value)
                     } catch {
-                        saveError = error.localizedDescription
+                        saveError = Failure(error).message
                     }
                 }
             })

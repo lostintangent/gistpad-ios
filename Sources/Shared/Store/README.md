@@ -22,7 +22,7 @@ with whatever the phone writes.
 | `GistCache` | The phone's copy of your gists and the last text GitHub gave for each file you've opened. |
 | `GistPadAccount` | Who's signed in: `github` and `preferences`. |
 | `GistPadPreferences`, `Tag` | Tags, pins, accent and autosave, from the account's Supabase metadata. |
-| `GitHubProblem` | Why GitHub couldn't be read or written: offline, reconnect or rejected. |
+| `Failure` | Something you asked for that didn't happen: one true sentence and the one fix that may work. |
 | `DailyNote` | One day's file in the `📆 Daily notes` gist, as the widget and Today button read it. |
 
 ## Account
@@ -60,9 +60,12 @@ Source bytes stay exact. GitHub can't store an empty file, so the web saves an
 invisible plus (U+2064) instead, and only this boundary knows it: decoding a
 `Gist.File` or a raw download drops it, sending text adds it, and `hasSize(of:)`
 compares text with GitHub's size. Its session has no URL cache or cookies and
-refuses redirects. `GitHubProblem(error)` sorts a failure: a 401 or an account
-error is `.reconnect`, a file that isn't yours or is too large is `.rejected`,
-and anything else is `.offline`.
+refuses redirects, and a body that doesn't decode is `.invalidResponse`.
+`Failure(error)` is the one place errors are sorted: a 401, a lapsed sign-in or
+Supabase refusing the session offers `.reconnect`, a request GitHub may take
+next time offers `.tryAgain`, and GistPad's own errors keep their sentence with
+no fix. Anything else, offline included, says GitHub couldn't be reached and
+offers `.tryAgain`, never the system's wording.
 
 ## Drafts
 

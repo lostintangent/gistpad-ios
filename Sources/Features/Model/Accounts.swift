@@ -43,7 +43,7 @@ extension GistPadModel {
             phase = account == nil ? .signedOut : .ready
             guard !(error is CancellationError) else { return }
             report(error, operation: "restore")
-            alertMessage = error.localizedDescription
+            failure = Failure(error)
         }
     }
 
@@ -76,7 +76,7 @@ extension GistPadModel {
             }
             libraryRequest = UUID()
             report(error, operation: "sign-in")
-            alertMessage = error.localizedDescription
+            failure = Failure(error)
         }
     }
 
@@ -85,7 +85,7 @@ extension GistPadModel {
     public func reconnect() async {
         await signIn()
         guard let activeEditor, account?.id == activeEditor.file.accountID, phase == .ready,
-            problem == nil
+            refreshFailure == nil
         else { return }
         await activeEditor.publish()
     }
@@ -133,8 +133,8 @@ extension GistPadModel {
         editors = [:]
         drafts = []
         gistCache = nil
-        alertMessage = nil
-        problem = nil
+        failure = nil
+        refreshFailure = nil
         state.replace(gists: [], known: false)
         state.selectedID = nil
         state.clearFilters()

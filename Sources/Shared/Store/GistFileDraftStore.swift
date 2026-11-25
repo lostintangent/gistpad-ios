@@ -113,7 +113,7 @@ extension DraftError: LocalizedError {
         case .notFound: String(localized: "This file is no longer on this iPhone.")
         case .changed: String(localized: "This file changed. Review the latest version first.")
         case .readOnly: String(localized: "Only its owner can edit this gist.")
-        case .notConfirmed: String(localized: "GitHub didn’t confirm the change. Try again.")
+        case .notConfirmed: String(localized: "GitHub didn’t confirm the change.")
         }
     }
 }

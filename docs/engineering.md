@@ -44,7 +44,8 @@ Every module uses one word for each of these, and the UI's words follow design.m
 | Edit | A checked change to a file's text, applied as one Undo step | `Edit` |
 | Proposal | What Edit or Review returns for a note: changes or suggestions, each quoting its passage | `Proposal` |
 | Suggestion | One of Review's notes on a passage. It offers a replacement only when the fix is clear, and nothing changes until you apply it. | `Proposal.Change`, like Edit's changes |
-| GitHub status | What GitHub needs from you, shown in the toolbar | `GitHubStatus` |
+| Failure | Something you asked for that didn't happen: one true sentence and the one button that may fix it | `Failure` |
+| GitHub status | Whether the list or the open note is checking GitHub or couldn't, shown in the toolbar | `GitHubStatus` |
 
 The verbs are **save** (to this iPhone), **publish** (to GitHub), **refresh** (read GitHub with `refresh()`, which the UI calls checking for changes) and **conflict** (GitHub changed underneath a draft), with no "land" or "remote": a file `isLocked` while a change you didn't type goes in, and GitHub's side is `github`.
 

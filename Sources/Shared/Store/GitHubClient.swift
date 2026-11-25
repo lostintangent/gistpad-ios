@@ -12,38 +12,15 @@ public enum GitHubError: Error, Equatable, Sendable {
 extension GitHubError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .http(401): String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
-        case .http(403), .http(429):
-            String(localized: "GitHub declined the request. Try again later or reconnect GitHub.")
+        case .http(401): String(localized: "GitHub needs you to sign in again.")
+        case .http(403), .http(429): String(localized: "GitHub declined the request.")
         case .http(404): String(localized: "This gist is no longer available to this account.")
         case .incompleteGist:
             String(localized: "GitHub returned an incomplete gist. It can’t be edited safely.")
         case .missingFile: String(localized: "This file is no longer in the gist.")
         case .fileTooLarge: String(localized: "This file is too large to open.")
-        case .invalidResponse, .http:
-            String(localized: "GitHub couldn’t complete the request. Try again.")
+        case .invalidResponse, .http: String(localized: "GitHub couldn’t complete the request.")
         }
-    }
-}
-
-/// Why GitHub couldn't be read or written.
-public enum GitHubProblem: Equatable, Sendable {
-    /// GitHub couldn't be reached or didn't answer, so trying again may work.
-    case offline
-    /// GitHub needs you to sign in again.
-    case reconnect
-    /// GitHub won't take the file: it isn't yours, or it's too large to edit here.
-    case rejected
-
-    /// Why a read or write that threw `error` didn't land.
-    public init(_ error: any Error) {
-        self =
-            switch error {
-            case GitHubError.http(status: 401), is AccountError: .reconnect
-            case GitHubError.incompleteGist, GitHubError.fileTooLarge, DraftError.readOnly:
-                .rejected
-            default: .offline
-            }
     }
 }
 
@@ -214,7 +191,7 @@ public actor GitHubClient {
         while let current = url {
             guard visited.insert(current).inserted else { throw GitHubError.invalidResponse }
             let (data, link) = try await request(url: current)
-            result += try decoder().decode([Element].self, from: data)
+            result += try decode([Element].self, from: data)
             url = try nextPage(link)
         }
         return result
@@ -235,15 +212,20 @@ public actor GitHubClient {
         return nil
     }
 
-    private func decoder() -> JSONDecoder {
+    /// A body GitHub didn't mean is an invalid response, so Foundation's decoding wording never shows.
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        do {
+            return try decoder.decode(type, from: data)
+        } catch {
+            throw GitHubError.invalidResponse
+        }
     }
 
     private func decoded<T: Decodable>(path: String, method: String = "GET", body: Data? = nil) async throws -> T {
         let (data, _) = try await request(path: path, method: method, body: body)
-        return try decoder().decode(T.self, from: data)
+        return try decode(T.self, from: data)
     }
 
     private func request(path: String, method: String = "GET", body: Data? = nil) async throws -> (Data, String?) {

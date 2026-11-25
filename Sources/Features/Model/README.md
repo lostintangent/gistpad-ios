@@ -12,7 +12,8 @@ is the promise to the user, and this module keeps it.
 GistPadModel
   account: GistPadAccount?        who's signed in
   phase                           loading, signing in, refreshing, signing out, ready
-  problem: GitHubProblem?         why the list couldn't read GitHub
+  refreshFailure: Failure?        why the list couldn't read GitHub
+  failure: Failure?               the one the app shows in an alert
   state: LibraryState             the list, built from the cache and drafts
   editors: [UUID: GistFileEditor] every file opened since launch
   opening: Opening?               the file on its way to the detail column
@@ -56,9 +57,10 @@ GistFileEditor                    a file you've opened
 Publishing and Today keep [docs/sync.md](../../../docs/sync.md)'s rules. Beyond
 them, a create that was cut off is found by its description and the sent bytes,
 so a gist is never created twice, and autosave runs only in the foreground. A
-failure is the editor's `GitHubProblem` until you type, publish again or
-reconnect. GitHub has no conditional write, so the fresh read before a publish
-narrows a race with the web but can't close it.
+failed publish keeps its `Failure` until you type, publish again or reconnect,
+and the next moment retries it only when it offers `.tryAgain`. GitHub has no
+conditional write, so the fresh read before a publish narrows a race with the
+web but can't close it.
 
 ## Testing
 

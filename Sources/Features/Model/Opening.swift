@@ -26,7 +26,7 @@ public struct Opening: Equatable {
     /// What the file's bar shows while it opens, from its row and the gist this iPhone has, so the
     /// bar doesn't change when it arrives.
     public let details: GistDetails
-    public var failure: String?
+    public var failure: Failure?
 
     /// A gist already on GitHub, which opens to read rather than to write.
     public var isPublished: Bool { if case .gist = request { true } else { false } }
@@ -39,11 +39,11 @@ extension GistPadModel {
     /// Opens a library row, at once when its file is already on this iPhone.
     public func open(rowID id: String) {
         guard account != nil else {
-            alertMessage = String(localized: "Reconnect GitHub to open this gist.")
+            failure = Failure(AccountError.signedOut)
             return
         }
         fileRequest = UUID()
-        alertMessage = nil
+        failure = nil
         if let file = cachedFile(rowID: id) { return present(file) }
         opening = placeholder(for: request(forRow: id))
         state.selectedID = id
@@ -141,7 +141,7 @@ extension GistPadModel {
     func present(_ file: GistFile, as request: Opening.Request? = nil) {
         opening = nil
         state.selectedID = rowID(for: file)
-        if file.isDeletedOnGitHub { alertMessage = Self.recoveryMessage }
+        if file.isDeletedOnGitHub { failure = Self.deletedOnGitHub }
         remember(file.request)
         let fileEditor: GistFileEditor
         if let open = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
@@ -167,7 +167,7 @@ extension GistPadModel {
     /// one created.
     public func open(_ request: Opening.Request) async {
         guard let account else {
-            alertMessage = String(localized: "Reconnect GitHub to open this gist.")
+            failure = Failure(AccountError.signedOut)
             return
         }
         let focusesEditor = request.focusesEditor
@@ -177,7 +177,7 @@ extension GistPadModel {
         }
         let token = UUID()
         fileRequest = token
-        alertMessage = nil
+        failure = nil
         opening = placeholder(for: request)
         defer {
             if focusesEditor { isCreating = false }
@@ -193,9 +193,9 @@ extension GistPadModel {
             guard token == fileRequest else { return }
             report(error, operation: "open")
             if case .new = request {
-                alertMessage = error.localizedDescription
+                failure = Failure(error)
             } else {
-                opening?.failure = error.localizedDescription
+                opening?.failure = Failure(error)
                 state.selectedID = opening?.rowID
             }
         }
@@ -293,9 +293,8 @@ extension GistPadModel {
         await open(saved)
     }
 
-    private static let recoveryMessage = String(
-        localized:
-            "This gist was deleted on GitHub. Your unpublished text is kept on this iPhone.")
+    private static let deletedOnGitHub = Failure(
+        String(localized: "This gist was deleted on GitHub. Your unpublished text is kept on this iPhone."))
 }
 
 extension GistFileEditor {

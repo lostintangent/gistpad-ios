@@ -92,7 +92,7 @@ struct AddToTodaySheet: View {
                 errorMessage =
                     error as? ChangeError == .notSaved
                     ? String(localized: "Your text is still here. Tap Add to try again.")
-                    : error.localizedDescription
+                    : Failure(error).message
                 isFocused = false
                 isAdding = false
             }

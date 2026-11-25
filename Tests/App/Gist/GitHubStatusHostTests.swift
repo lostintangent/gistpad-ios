@@ -1,6 +1,7 @@
 @testable import Editor
 import Screens
 import Observation
+import Store
 import SwiftUI
 import Testing
 import UIKit
@@ -56,7 +57,7 @@ struct GitHubStatusHostTests {
         let generation = session.generation
         let states: [(String, GitHubStatus)] = [
             ("attention", problem()),
-            ("checking", .checking(operation: "Checking GitHub for changes")),
+            ("checking", .checking),
             ("unresolved", problem()),
             ("idle", .idle),
         ]
@@ -81,9 +82,7 @@ struct GitHubStatusHostTests {
     }
 
     private func problem() -> GitHubStatus {
-        .problem(
-            .offline, heading: "Couldn’t check for changes",
-            detail: "Your gists on this iPhone are unchanged.")
+        .failed(Failure("GitHub couldn’t be reached.", action: .tryAgain))
     }
 }
 

@@ -54,7 +54,7 @@ extension GistPadModel {
             guard !Task.isCancelled else { break }
             if let fileEditor = editors[draft.id] {
                 await fileEditor.publish(reason: .background)
-                if fileEditor.status == .failed(.offline) { break }
+                if case .failed(let failure) = fileEditor.status, failure.action == .tryAgain { break }
             } else {
                 do { _ = try await publish(draft) } catch is URLError { break } catch {}
             }
@@ -197,7 +197,7 @@ extension GistFileEditor {
 
     private var autosaveAllowed: Bool {
         model.isForeground && model.account?.id == file.accountID
-            && model.phase == .ready && model.problem == nil
+            && model.phase == .ready && model.refreshFailure == nil
             && model.account?.preferences.booleanValue(.isAutoSaveEnabled) == true
             && canEdit && !file.isDeletedOnGitHub
     }
@@ -300,7 +300,7 @@ extension GistFileEditor {
             if !(error is CancellationError || (error as? URLError)?.code == .cancelled) {
                 logger.error(
                     "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
-                failure = GitHubProblem(error)
+                failure = Failure(error)
             }
             // The publish may have recorded sent text or found its gist before it stopped.
             if let stored = try? await model.current(file.nextDraft) { file.update(stored) }

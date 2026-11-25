@@ -77,9 +77,11 @@ struct RootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 model.updateCalendar()
             }
-            .alert("GistPad", item: $model.alertMessage) { _ in
-            } message: { message in
-                Text(message)
+            .alert(error: $model.failure) {
+                if model.failure?.action == .reconnect {
+                    Button(role: .cancel) {}
+                    Button(Failure.Action.reconnect.title) { Task { await model.reconnect() } }
+                }
             }
             .sheet(item: $sheet) { sheet in
                 switch sheet {
@@ -152,8 +154,11 @@ struct RootView: View {
             NavigationStack {
                 ZStack {
                     if let opening = model.opening, let failure = opening.failure {
-                        OpenFailedView(gist: opening.details, message: failure) {
-                            Task { await model.open(opening.request) }
+                        OpenFailedView(gist: opening.details, failure: failure) {
+                            Task {
+                                if failure.action == .reconnect { await model.reconnect() }
+                                await model.open(opening.request)
+                            }
                         }
                     } else if let details = model.opening?.details ?? active?.details {
                         gistScreen(details)
@@ -331,7 +336,7 @@ struct RootView: View {
                     ToolbarItem(placement: .bottomBar) {
                         GitHubStatusControl(status: fileEditor.refreshStatus) {
                             Task {
-                                if fileEditor.refreshProblem == .reconnect { await model.reconnect() }
+                                if fileEditor.refreshFailure?.action == .reconnect { await model.reconnect() }
                                 await fileEditor.refresh()
                             }
                         }
@@ -373,7 +378,7 @@ struct RootView: View {
                 }) {
                     Task { await model.open(.gist(id: gist.id)) }
                 } else {
-                    model.alertMessage = String(localized: "No gist has that title.")
+                    model.failure = Failure(String(localized: "No gist has that title."))
                 }
             })
             .id(fileEditor.editor.id)
@@ -437,7 +442,7 @@ struct RootView: View {
         guard let link = linkToOpen, let account = model.account else { return }
         sheet = nil
         intelligence.target = nil
-        model.alertMessage = nil
+        model.failure = nil
         switch link {
         case .today:
             // Like the Today button, a folded phone shows Today while it's staged.
@@ -451,8 +456,8 @@ struct RootView: View {
             await model.open(.gist(id: id, filename: filename))
         case .unpublishedGist(let accountID, let draftID):
             guard accountID == account.id else {
-                model.alertMessage = String(
-                    localized: "This draft belongs to another GitHub account. Sign out, then sign in with that account to open it.")
+                model.failure = Failure(
+                    String(localized: "This draft belongs to another GitHub account. Sign out, then sign in with that account to open it."))
                 pending.link = nil
                 return
             }

@@ -2,6 +2,7 @@ import Editor
 import Intelligence
 import Model
 import Observation
+import Store
 import SwiftUI
 import UIKit
 
@@ -17,14 +18,12 @@ final class IntelligencePresentation {
     ) {
         let editor = fileEditor.editor
         guard editor.isSettled else {
-            model.alertMessage = String(
-                localized: "Finish typing or wait for Writing Tools, then try again.")
+            model.failure = Failure(Edit.Failure.unsettled)
             return
         }
         present(editor: editor, title: fileEditor.details.title) { range in
             guard fileEditor.details.isOwned else {
-                model.alertMessage = String(
-                    localized: "This gist is read-only, so this passage can’t open in Edit.")
+                model.failure = Failure(String(localized: "This gist is read-only, so this passage can’t open in Edit."))
                 return
             }
             let generation = editor.generation
@@ -33,7 +32,7 @@ final class IntelligencePresentation {
             Task {
                 await Task.yield()
                 guard editor.generation == generation else {
-                    model.alertMessage = String(localized: "This passage is no longer in the file.")
+                    model.failure = Failure(String(localized: "This passage is no longer in the file."))
                     return
                 }
                 editor.select(range)

@@ -73,7 +73,7 @@ public struct RenameSheet: View {
                 try await save(value)
                 dismiss()
             } catch {
-                self.error = error.localizedDescription
+                self.error = Failure(error).message
             }
         }
     }

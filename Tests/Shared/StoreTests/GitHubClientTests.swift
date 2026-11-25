@@ -1,3 +1,4 @@
+import Auth
 import Foundation
 import Synchronization
 import Testing
@@ -59,6 +60,28 @@ import Testing
         let saved = try await client.updateGist(id: created.id, files: ["README.md": .content("")])
         #expect(server.gists[0].files["README.md"]?.content == Gist.File.emptyContent)
         #expect(try await client.content(gist: saved, filename: "README.md") == "")
+    }
+
+    /// A failure says what's true and offers the one fix that may work: trying again when GitHub may
+    /// answer, signing in when it needs you, and nothing when neither would help.
+    @Test(arguments: [
+        (GitHubError.http(status: 401), Failure("GitHub needs you to sign in again.", action: .reconnect)),
+        (AccountError.signedOut, Failure("GitHub needs you to sign in again.", action: .reconnect)),
+        (AuthError.sessionMissing, Failure("GitHub needs you to sign in again.", action: .reconnect)),
+        (GitHubError.http(status: 403), Failure("GitHub declined the request.", action: .tryAgain)),
+        (URLError(.timedOut), Failure("GitHub couldn’t be reached.", action: .tryAgain)),
+        (GitHubError.http(status: 404), Failure("This gist is no longer available to this account.")),
+        (DraftError.readOnly, Failure("Only its owner can edit this gist.")),
+    ] as [(any Error, Failure)])
+    func failureOffersOnlyAFixThatMayWork(error: any Error, failure: Failure) {
+        #expect(Failure(error) == failure)
+    }
+
+    @Test func aBodyThatDoesNotDecodeIsAnInvalidResponse() async {
+        let session = FixtureServer { _ in FixtureServer.Response(data: Data("{}".utf8)) }.session
+        let client = GitHubClient(session: session) { "fake" }
+        await #expect(throws: GitHubError.invalidResponse) { try await client.listGists() }
+        await #expect(throws: GitHubError.invalidResponse) { try await client.gist(id: "abc123") }
     }
 
     @Test func throttlingDoesNotLookLikeSignOut() async throws {

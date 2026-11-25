@@ -1,6 +1,7 @@
 import Foundation
 import Model
 import Screens
+import Store
 
 extension LibraryActions {
     /// The Library's verbs, run by the model. The root view passes the ones that move navigation:
@@ -20,7 +21,7 @@ extension LibraryActions {
         actions.reconnect = { Task { await model.reconnect() } }
         actions.recoverStatus = {
             Task {
-                if model.problem == .reconnect {
+                if model.refreshFailure?.action == .reconnect {
                     await model.reconnect()
                 } else {
                     await model.refresh()
@@ -29,7 +30,7 @@ extension LibraryActions {
         }
         actions.togglePin = { rowID in
             guard let account = model.account, let id = model.gistID(forRow: rowID) else {
-                model.alertMessage = String(localized: "You can pin this gist after it publishes.")
+                model.failure = Failure(String(localized: "You can pin this gist after it publishes."))
                 return
             }
             let pinned = !account.preferences.pinnedGists.contains(id)
@@ -39,7 +40,7 @@ extension LibraryActions {
             guard let id = model.gistID(forRow: rowID),
                 let gist = model.gistCache?.gists.first(where: { $0.id == id })
             else {
-                model.alertMessage = String(localized: "You can archive this gist after it publishes.")
+                model.failure = Failure(String(localized: "You can archive this gist after it publishes."))
                 return
             }
             model.setArchived(!gist.isArchived, gistID: id, undoManager: undoManager)

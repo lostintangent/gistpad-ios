@@ -170,12 +170,12 @@ final class Phone {
     /// The daily note rows in the list.
     var days: Set<String> { Set(model.state.gists.filter(\.isDailyNote).map(\.id)) }
 
-    /// The list's GitHub status: a problem's heading, "Checking" while it refreshes, or nil.
+    /// The list's GitHub status: why it couldn't read GitHub, "Checking" while it refreshes, or nil.
     var status: String? {
         switch model.refreshStatus {
         case .idle: nil
         case .checking: "Checking"
-        case .problem(_, let heading, _): heading
+        case .failed(let failure): failure.message
         }
     }
 

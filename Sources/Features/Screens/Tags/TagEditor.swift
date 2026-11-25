@@ -143,7 +143,7 @@ public struct TagEditor: View {
                 try await save(edits)
                 dismiss()
             } catch {
-                saveError = error.localizedDescription
+                saveError = Failure(error).message
             }
         }
     }

@@ -84,7 +84,7 @@
 - Save and reading the cache work. Publish and Refresh wait for the next moment above.
 
 ### What you see
-- Nothing, while it's on GitHub or will publish by itself. There's no Publish button. Edits publish at the moments in [Edit](#edit), and one that didn't land tries again at the next.
+- Nothing, while it's on GitHub or will publish by itself. There's no Publish button. Edits publish at the moments in [Edit](#edit), and one that didn't land tries again at the next when GitHub may take it.
 - **GitHub needs attention**, for a conflict or a GitHub reconnect.
 - **Couldn't check for changes**, in the list, when the list couldn't refresh. A refresh that only timed out or lost its connection shows nothing, and the next moment tries again.
 - An alert, when a change didn't go through. Nothing retries it.

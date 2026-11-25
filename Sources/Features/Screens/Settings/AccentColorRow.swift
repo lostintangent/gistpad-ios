@@ -1,5 +1,6 @@
 #if os(iOS)
 import Appearance
+import Store
 import SwiftUI
 
 public struct AccentColorRow: View {
@@ -35,7 +36,7 @@ public struct AccentColorRow: View {
                 try await save(picked.hex)
                 error = nil
             } catch {
-                self.error = error.localizedDescription
+                self.error = Failure(error).message
             }
         }
         if let error {

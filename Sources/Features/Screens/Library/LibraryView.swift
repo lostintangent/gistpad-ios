@@ -248,8 +248,8 @@ public struct LibraryView: View {
         .accessibilityIdentifier(id)
     }
 
-    /// With nothing to list, the empty state explains a problem instead of the toolbar.
-    private var explainsProblem: Bool { !isLoading && !state.hasFilters && !hasVisibleGists }
+    /// With nothing to list, the empty state explains a failure instead of the toolbar.
+    private var explainsFailure: Bool { !isLoading && !state.hasFilters && !hasVisibleGists }
 
     private var hasVisibleGists: Bool {
         !state.matchingGists(in: .gists).isEmpty || !displayedSections.isEmpty
@@ -366,26 +366,18 @@ public struct LibraryView: View {
     /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            switch status.problem {
+            switch status.failure {
             case _ where state.hasFilters:
                 ContentUnavailableView.search(text: state.query)
-            case .offline?, .rejected?:
+            case let failure?:
                 ContentUnavailableView {
                     Label(String(localized: "Couldn’t Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
                 } description: {
-                    Text("GitHub couldn’t be reached. Your gists will appear once it answers.", bundle: .module)
+                    Text(verbatim: failure.message)
                 } actions: {
-                    Button(String(localized: "Try Again", bundle: .module)) {
-                        Task { await actions.refresh() }
+                    if let action = failure.action {
+                        Button(action.title, action: actions.recoverStatus)
                     }
-                }
-            case .reconnect?:
-                ContentUnavailableView {
-                    Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
-                } description: {
-                    Text("Sign in with GitHub again to see your gists.", bundle: .module)
-                } actions: {
-                    Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
                 }
             case nil:
                 ContentUnavailableView {
@@ -486,7 +478,7 @@ public struct LibraryView: View {
             ToolbarItem(placement: .topBarLeading) { EditButton() }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
-                if status.problem != nil, !explainsProblem {
+                if status.failure != nil, !explainsFailure {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
                         GitHubStatusControl(status: status, recover: actions.recoverStatus)

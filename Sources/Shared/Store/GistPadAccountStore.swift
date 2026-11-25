@@ -16,8 +16,8 @@ extension AccountError: LocalizedError {
         case .invalidConfiguration:
             String(localized: "GitHub sign-in isn’t configured correctly in this build.")
         case .signedOut, .accountChanged, .reconnectGitHub:
-            String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
-        case .keychain: String(localized: "GistPad couldn’t use your sign-in on this iPhone. Sign in again.")
+            String(localized: "GitHub needs you to sign in again.")
+        case .keychain: String(localized: "GistPad couldn’t use your sign-in on this iPhone.")
         }
     }
 }

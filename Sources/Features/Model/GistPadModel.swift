@@ -11,7 +11,7 @@ public final class GistPadModel {
     /// Whether you're signing in, loading, refreshing or signing out. Links wait for loading, not for GitHub.
     public internal(set) var phase: Phase = .loading
     /// Why the list couldn't read GitHub, until a refresh gets through.
-    public internal(set) var problem: GitHubProblem?
+    public internal(set) var refreshFailure: Failure?
     /// The file you have open, which stays open behind the library until another replaces it.
     var presented: GistFileEditor?
     /// The file opening in the detail column, until it's presented or fails.
@@ -19,8 +19,8 @@ public final class GistPadModel {
     public internal(set) var drafts: [GistFileDraft] = []
     public internal(set) var gistCache: GistCache?
     var isCreating = false
-    /// The one message the app shows in an alert, such as a failed open or change.
-    public var alertMessage: String?
+    /// The one failure the app shows in an alert, such as a failed open or change.
+    public var failure: Failure?
     /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
     public internal(set) var editors: [UUID: GistFileEditor] = [:]
     /// Autosave runs only while the app is in the foreground.

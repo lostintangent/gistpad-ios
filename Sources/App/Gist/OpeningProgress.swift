@@ -1,4 +1,5 @@
 import Screens
+import Store
 import SwiftUI
 
 /// A spinner over a file on its way, once it takes a moment.
@@ -24,18 +25,20 @@ struct OpeningProgress: View {
 
 struct OpenFailedView: View {
     let gist: GistDetails
-    let message: String
-    let retry: () -> Void
+    let failure: Failure
+    let recover: () -> Void
 
     var body: some View {
         ContentUnavailableView {
             Label("Couldn’t Open This File", systemImage: "exclamationmark.circle")
         } description: {
-            Text(message)
+            Text(failure.message)
         } actions: {
-            Button("Try Again", action: retry)
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("note-open-retry")
+            if let action = failure.action {
+                Button(action.title, action: recover)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("note-open-retry")
+            }
         }
         .gistTitle(gist)
     }

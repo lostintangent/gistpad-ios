@@ -70,7 +70,7 @@ struct PublishingTests {
         let today = try await phone.open(.today())
         try await phone.type("# Today\n\n- [ ] Walk", in: today)
         await today.publish()
-        #expect(today.status == .failed(.offline))
+        #expect(today.status == .failed(Failure("GitHub couldn’t be reached.", action: .tryAgain)))
         phone.goOnline()
         switch moment {
         case .autosave:

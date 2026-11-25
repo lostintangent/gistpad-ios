@@ -93,11 +93,11 @@ public struct GistScreen<Source: View, Preview: View>: View {
         }
     }
 
-    /// A conflict opens the diff, and a lost connection reconnects GitHub.
+    /// A conflict opens the diff, and a lapsed sign-in reconnects GitHub.
     private var needsYou: (() -> Void)? {
         switch status {
         case .conflict: actions.reviewChanges
-        case .failed(.reconnect): actions.reconnect
+        case .failed(let failure) where failure.action == .reconnect: actions.reconnect
         default: nil
         }
     }

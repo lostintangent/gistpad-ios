@@ -8,13 +8,8 @@ import Store
 
 extension GistPadModel {
     public var refreshStatus: GitHubStatus {
-        if let problem {
-            return .problem(
-                problem, heading: String(localized: "Couldn’t check for changes"),
-                detail: String(localized: "Your gists on this iPhone are unchanged."))
-        }
-        return phase == .refreshing
-            ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
+        if let refreshFailure { return .failed(refreshFailure) }
+        return phase == .refreshing ? .checking : .idle
     }
 
     // Supabase only supplies preferences, so GitHub reads keep going when its refresh fails. A missing GitHub token still needs reconnecting.
@@ -58,8 +53,8 @@ extension GistPadModel {
         let request = UUID()
         libraryRequest = request
         phase = .refreshing
-        // A retry shows as checking instead of the problem it may be about to clear.
-        problem = nil
+        // A retry shows as checking instead of the failure it may be about to clear.
+        refreshFailure = nil
         defer {
             if request == libraryRequest, phase == .refreshing { phase = .ready }
         }
@@ -84,25 +79,25 @@ extension GistPadModel {
             // A failed refresh leaves the list stale, so returning to the app tries again.
             refreshedAt = nil
             // A request that only timed out or lost its connection keeps your gists on screen without
-            // a problem, and the next refresh tries again. With nothing cached, the failure explains itself.
+            // a failure, and the next refresh tries again. With nothing cached, the failure explains itself.
             let code = (error as? URLError)?.code
             let wasDropped = code == .timedOut || code == .networkConnectionLost
             guard !(error is CancellationError || code == .cancelled), !(wasDropped && gistCache != nil)
             else { return }
             report(error, operation: "refresh")
-            problem = GitHubProblem(error)
+            refreshFailure = Failure(error)
         }
     }
 }
 
 extension GistFileEditor {
     public var refreshStatus: GitHubStatus {
-        guard let problem = refreshProblem else { return .idle }
+        guard let refreshFailure else { return .idle }
         switch status {
         case .failed, .conflict:
             return .idle
         default:
-            return .problem(problem, heading: String(localized: "Couldn’t check for changes"))
+            return .failed(refreshFailure)
         }
     }
 
@@ -149,12 +144,10 @@ extension GistFileEditor {
                     expectedGeneration: generation
                 ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
             }
-            refreshProblem = nil
+            refreshFailure = nil
             refreshedAt = .now
         } catch {
-            logger.error(
-                "Refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
-            refreshProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
+            refreshFailed(error)
         }
     }
 
@@ -173,12 +166,17 @@ extension GistFileEditor {
                 editor.reload(text)
                 savedGeneration = editor.generation
             }
-            refreshProblem = nil
+            refreshFailure = nil
             refreshedAt = .now
         } catch {
-            logger.error(
-                "Refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
-            refreshProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
+            refreshFailed(error)
         }
+    }
+
+    /// A read that fails stays quiet, unless GitHub needs you to sign in again.
+    private func refreshFailed(_ error: any Error) {
+        logger.error("Refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
+        let failure = Failure(error)
+        refreshFailure = failure.action == .reconnect ? failure : nil
     }
 }

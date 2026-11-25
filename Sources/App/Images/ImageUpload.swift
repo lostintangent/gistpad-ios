@@ -77,7 +77,7 @@ final class ImageUpload {
         case ImageError.tooLarge: String(localized: "Choose an image under 50 MB.")
         case ImageError.http: String(localized: "GistPad’s image storage didn’t accept this image.")
         case is ImageError: String(localized: "This item couldn’t be read as an image. Choose another one.")
-        default: error.localizedDescription
+        default: Store.Failure(error).message
         }
     }
 }

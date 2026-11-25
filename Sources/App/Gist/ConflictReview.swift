@@ -166,7 +166,7 @@ struct ConflictReview: View {
                 try await fileEditor.resolveConflict(review, text: text, publishes: publishes)
                 dismiss()
             } catch {
-                self.error = error.localizedDescription
+                self.error = Failure(error).message
             }
         }
     }

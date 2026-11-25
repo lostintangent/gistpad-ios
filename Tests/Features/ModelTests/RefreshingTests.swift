@@ -38,7 +38,7 @@ struct RefreshingTests {
         // A refresh that fails keeps what I have. A dropped connection stays quiet.
         phone.dropRequests(.notConnectedToInternet)
         await phone.model.refresh()
-        #expect(phone.status == "Couldn’t check for changes")
+        #expect(phone.status == "GitHub couldn’t be reached.")
         phone.dropRequests(.networkConnectionLost)
         await phone.model.refresh()
         #expect(phone.status == nil)
