@@ -7,8 +7,8 @@ the editor, Preview, Intelligence, Platform and Store share one reading of the s
 MarkdownDocument                  a note's source, read once
   text  contentStart  body        the source, where the body starts, and the body
   range                           the whole text
-  spans  spans(in:)               the constructs to style, for the note or some lines
-  restyledRange(from:edited:)     the lines an edit's styling can reach
+  spans  spans(in:)               the constructs to highlight, for the note or some lines
+  spanRange(for:from:)            the lines whose spans an edit can change
   blocks                          headings, paragraphs, list items, table rows and code
   excerpt                         the prose on one line, for a snippet
   taskMarkers                     every task box

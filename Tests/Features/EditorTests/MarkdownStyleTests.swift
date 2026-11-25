@@ -146,28 +146,28 @@
             }
         }
 
-        @Test func aKeystrokePaintsTheNoteOnce() {
+        @Test func aKeystrokeHighlightsTheNoteOnce() {
             let editor = MarkdownEditor(text: "# Heading\n\nProse")
             let view = editor.textView
             view.selectedRange = NSRange(location: view.textStorage.length, length: 0)
-            let paints = AttributePasses(of: view.textStorage)
+            let passes = AttributePasses(of: view.textStorage)
             view.insertText("!")
             #expect(editor.document.text == "# Heading\n\nProse!")
-            #expect(paints.ranges.count == 1)
+            #expect(passes.ranges.count == 1)
         }
 
-        @Test func aKeystrokeRestylesOnlyItsParagraph() {
+        @Test func aKeystrokeHighlightsOnlyItsParagraph() {
             let paragraph = "Some **bold** prose.\n\n"
             let editor = MarkdownEditor(text: String(repeating: paragraph, count: 100))
             let view = editor.textView
             let start = 50 * paragraph.utf16.count
             view.selectedRange = NSRange(location: start + 5, length: 0)
-            let paints = AttributePasses(of: view.textStorage)
+            let passes = AttributePasses(of: view.textStorage)
             view.insertText("x")
-            #expect(paints.ranges == [(view.text as NSString).lineRange(for: NSRange(location: start, length: 0))])
+            #expect(passes.ranges == [(view.text as NSString).lineRange(for: NSRange(location: start, length: 0))])
         }
 
-        @Test func restylingEditsLooksLikeOpeningTheNoteAfresh() {
+        @Test func highlightingEditsLooksLikeOpeningTheNoteAfresh() {
             let editor = MarkdownEditor(text: "# Notes\n\nProse with `code\n\n```\nfenced\n```\nTail **bold**\n")
             let view = editor.textView
             // Opening a fence above another turns the code below it into prose, and back.
@@ -183,7 +183,7 @@
         }
     }
 
-    /// The ranges of the passes that restyle `storage` without changing its characters.
+    /// The ranges of the passes that change `storage`'s attributes without changing its characters.
     private final class AttributePasses: NSObject {
         private(set) var ranges: [NSRange] = []
 

@@ -62,7 +62,7 @@ struct EditorFocusTests {
         let view = editor.textView
         let manager = try #require(view.textLayoutManager)
         let exact = view.contentSize.height
-        // Restyling outside an anchored update leaves TextKit's short estimate for offscreen text.
+        // Highlighting outside an anchored update leaves TextKit's short estimate for offscreen text.
         manager.invalidateLayout(for: try #require(manager.textContentManager?.documentRange))
         view.setNeedsLayout()
         view.layoutIfNeeded()

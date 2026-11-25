@@ -80,7 +80,7 @@ extension MarkdownDocument {
     public var spans: [Span] { spans(in: range) }
 
     /// The spans of the whole lines in `range`, with every literal and prose run it touches whole.
-    /// Later spans paint over earlier ones.
+    /// Later spans override earlier ones.
     public func spans(in range: NSRange) -> [Span] {
         var spans: [Span] = []
         func add(_ range: NSRange, _ kind: Span.Kind) {
@@ -109,7 +109,7 @@ extension MarkdownDocument {
         }
         for literal in literals where NSIntersectionRange(literal.range, range).length > 0 {
             add(literal.range, literal.kind == .code ? .code : .frontMatter)
-            // A fence is markup, so it paints like other line-leading markers.
+            // A fence is markup, so it's highlighted like other line-leading markers.
             for fence in literal.fences { add(fence, .punctuation) }
         }
         for run in proseRuns(touching: range) {
@@ -118,25 +118,25 @@ extension MarkdownDocument {
         return spans
     }
 
-    /// The whole lines to restyle once `old` became this document by a change to `edited`, a range
-    /// of this text, so that `spans(in:)` over them leaves the note styled as `spans` would. That's
-    /// every prose run and literal the change touches in either document, grown until it splits
-    /// none. Past it the text is the same and no literal is open, so it parses the same way.
-    public func restyledRange(from old: MarkdownDocument, edited: NSRange) -> NSRange {
+    /// The whole lines whose spans can differ once `old` became this document by a change to
+    /// `edited`, a range of this text, so `spans(in:)` over them and `old`'s spans elsewhere make
+    /// `spans`. That's every prose run and literal the change touches in either document, grown
+    /// until it splits none. Past it the text is the same and no literal is open, so it parses the
+    /// same way.
+    public func spanRange(for edited: NSRange, from old: MarkdownDocument) -> NSRange {
         let delta = source.length - old.source.length
-        var restyled = edited
+        var range = edited
         while true {
-            let grown = old.styledRange(
-                around: NSRange(location: restyled.location, length: restyled.length - delta))
+            let grown = old.runRange(around: NSRange(location: range.location, length: range.length - delta))
             let next = NSUnionRange(
-                styledRange(around: restyled), NSRange(location: grown.location, length: grown.length + delta))
-            if next == restyled { return restyled }
-            restyled = next
+                runRange(around: range), NSRange(location: grown.location, length: grown.length + delta))
+            if next == range { return range }
+            range = next
         }
     }
 
     /// The whole lines of `range`, grown to every prose run and literal they touch.
-    private func styledRange(around range: NSRange) -> NSRange {
+    private func runRange(around range: NSRange) -> NSRange {
         let lines = source.lineRange(for: range)
         return (proseRuns(touching: lines) + literals.map(\.range).filter { touches($0, lines) })
             .reduce(lines, NSUnionRange)

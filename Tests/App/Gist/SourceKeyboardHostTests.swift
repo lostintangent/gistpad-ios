@@ -8,7 +8,7 @@ import UIKit
 
 @Suite(.serialized, .timeLimit(.minutes(1)))
 struct SourceKeyboardHostTests {
-    @Test func restylingClearsRemovedBoldHeadingAndFenceAttributes() async throws {
+    @Test func highlightingClearsRemovedBoldHeadingAndFenceAttributes() async throws {
         let fixture = try await SourceKeyboardFixture(
             source: "# A heading\n\nA **bold** word.\n\n```swift\nlet note = 1\n\nA later paragraph.\n",
             size: "large"
@@ -122,8 +122,8 @@ struct SourceKeyboardHostTests {
         try fixture.expectKeyboardViewport()
     }
 
-    @Test("Restyling never pulls a deliberate keyboard-up scroll back to the caret")
-    func deliberateScrollAwaySurvivesRestyling() async throws {
+    @Test("Highlighting never pulls a deliberate keyboard-up scroll back to the caret")
+    func deliberateScrollAwaySurvivesHighlighting() async throws {
         let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
         defer { fixture.close() }
         fixture.session.requestFocusAtEnd()

@@ -155,9 +155,9 @@
             needsEditingCaretReveal = false
         }
 
-        /// Restyles `range` of the text in `paint` without touching its characters, selection or Undo,
-        /// and keeps the caret or the passage being read where it was.
-        func updateAttributes(in range: NSRange, _ paint: (NSTextStorage) -> Void) {
+        /// Updates the attributes of `range` in `update` without touching its characters, selection
+        /// or Undo, and keeps the caret or the passage being read where it was.
+        func updateAttributes(in range: NSRange, _ update: (NSTextStorage) -> Void) {
             let anchor = beginAttributeUpdate()
             defer { endAttributeUpdate(anchor) }
             // While the caret is on screen, the style lands on a copy and only the runs that change
@@ -167,17 +167,17 @@
             let undo = undoManager
             undo?.disableUndoRegistration()
             storage.beginEditing()
-            paint(storage)
+            update(storage)
             storage.endEditing()
             if storage !== textStorage { applyChangedAttributes(of: storage, in: range) }
             undo?.enableUndoRegistration()
             if selectedRange != selection { selectedRange = selection }
         }
 
-        private func applyChangedAttributes(of styled: NSAttributedString, in range: NSRange) {
+        private func applyChangedAttributes(of updated: NSAttributedString, in range: NSRange) {
             let storage = textStorage
             storage.beginEditing()
-            styled.enumerateAttributes(in: range) {
+            updated.enumerateAttributes(in: range) {
                 attributes, range, _ in
                 storage.enumerateAttributes(in: range) { current, run, _ in
                     for key in current.keys where attributes[key] == nil {

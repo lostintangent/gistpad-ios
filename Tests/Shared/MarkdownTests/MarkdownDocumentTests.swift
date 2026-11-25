@@ -193,7 +193,7 @@ struct MarkdownDocumentTests {
         #expect(strings(.emphasis) == ["*emphasis*"])
     }
 
-    @Test func codeAndItsDelimitersPaintOverProseStyles() {
+    @Test func codeAndItsDelimitersOverrideProseSpans() {
         let source = "`[literal](url) **not emphasis**`\n```swift\nlet value = 1\n```\n"
         let spans = MarkdownDocument(source).spans
         let literal = (source as NSString).range(of: "literal")
@@ -243,17 +243,17 @@ struct MarkdownDocumentTests {
         #expect(strings(.emphasis).contains("___both___"))
     }
 
-    @Test func aKeystrokeRestylesOnlyItsParagraph() {
+    @Test func aKeystrokeChangesOnlyItsParagraphsSpans() {
         let paragraph = "Some **bold** prose.\n\n"
         let length = paragraph.utf16.count
         let old = MarkdownDocument(String(repeating: paragraph, count: 100))
         let typed = NSRange(location: 50 * length + 5, length: 1)
         let new = MarkdownDocument(
             (old.text as NSString).replacingCharacters(in: NSRange(location: typed.location, length: 0), with: "x"))
-        #expect(new.restyledRange(from: old, edited: typed) == NSRange(location: 50 * length, length: length))
+        #expect(new.spanRange(for: typed, from: old) == NSRange(location: 50 * length, length: length))
     }
 
-    @Test func restylingWhatAnEditTouchedStylesTheNoteAsRestylingItAllWould() throws {
+    @Test func spanningWhatAnEditTouchedSpansTheNoteAsSpanningItAllWould() throws {
         let note = """
             ---
             title: Note
@@ -292,26 +292,26 @@ struct MarkdownDocumentTests {
                 ? (document.range, source.replacingCharacters(in: change, with: typed)) : (change, typed)
             let next = MarkdownDocument(source.replacingCharacters(in: replaced, with: replacement))
             let edited = NSRange(location: replaced.location, length: replacement.utf16.count)
-            let restyled = next.restyledRange(from: document, edited: edited)
-            let spans = next.spans(in: restyled)
-            var styled = styles(document.spans, length: source.length)
-            styled.replaceSubrange(Range(replaced)!, with: repeatElement(nil, count: edited.length))
-            styled.replaceSubrange(Range(restyled)!, with: styles(spans, length: next.range.length)[Range(restyled)!])
+            let spanned = next.spanRange(for: edited, from: document)
+            let spans = next.spans(in: spanned)
+            var patched = kinds(document.spans, length: source.length)
+            patched.replaceSubrange(Range(replaced)!, with: repeatElement(nil, count: edited.length))
+            patched.replaceSubrange(Range(spanned)!, with: kinds(spans, length: next.range.length)[Range(spanned)!])
             try #require(
-                spans.allSatisfy { NSUnionRange($0.range, restyled) == restyled }
-                    && styled == styles(next.spans, length: next.range.length),
+                spans.allSatisfy { NSUnionRange($0.range, spanned) == spanned }
+                    && patched == kinds(next.spans, length: next.range.length),
                 "\(document.text.debugDescription) became \(next.text.debugDescription)")
             document = next.range.length > 1_500 ? MarkdownDocument(note) : next
         }
     }
 
-    /// Each code unit's span kinds in painting order. Nil is text no paint has reached.
-    private func styles(_ spans: [MarkdownDocument.Span], length: Int) -> [[MarkdownDocument.Span.Kind]?] {
-        var styles = [[MarkdownDocument.Span.Kind]?](repeating: [], count: length)
+    /// Each code unit's span kinds in order. Nil is text no span has reached.
+    private func kinds(_ spans: [MarkdownDocument.Span], length: Int) -> [[MarkdownDocument.Span.Kind]?] {
+        var kinds = [[MarkdownDocument.Span.Kind]?](repeating: [], count: length)
         for span in spans {
-            for offset in Range(span.range)! { styles[offset]?.append(span.kind) }
+            for offset in Range(span.range)! { kinds[offset]?.append(span.kind) }
         }
-        return styles
+        return kinds
     }
 
     private func strings(of source: String) -> (MarkdownDocument.Span.Kind) -> [String] {

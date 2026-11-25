@@ -23,9 +23,9 @@
         @ObservationIgnored var hosts: [TextViewHost.Reference] = []
         @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
         @ObservationIgnored private var isHighlighting = false
-        /// The document the text view last showed styled, and how much text at each end no edit has
-        /// touched since, so restyling a change paints only the blocks it touched.
-        @ObservationIgnored private var styled: MarkdownDocument?
+        /// The document the text view last highlighted, and how much text at each end no edit has
+        /// touched since, so highlighting an edit covers only the blocks it touched.
+        @ObservationIgnored private var highlighted: MarkdownDocument?
         @ObservationIgnored private var unedited: (prefix: Int, suffix: Int)?
         /// A caret placed by a focus request, waiting for the text view to reach a window.
         @ObservationIgnored public private(set) var isFocusPending = false
@@ -236,32 +236,32 @@
             textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
         }
 
-        /// Restyles the whole note, as a change to its look or its comments needs.
+        /// Highlights the whole note, as a change to its look or its comments needs.
         func highlight() {
-            styled = nil
-            restyle()
+            highlighted = nil
+            highlightEdits()
         }
 
-        /// Restyles what changed since the last paint. A quoted passage can match anywhere after an
-        /// edit, so a note with quotes restyles whole.
-        private func restyle() {
+        /// Highlights what the edits since the last highlight touched. A quoted passage can match
+        /// anywhere after an edit, so a note with quotes highlights whole.
+        private func highlightEdits() {
             guard isSettled, !isHighlighting else { return }
             let document = shownDocument
             var range = document.range
-            if let styled, commentHighlighter.quotes.isEmpty {
+            if let highlighted, commentHighlighter.quotes.isEmpty {
                 guard let unedited else { return }
                 let edited = NSRange(unedited.prefix..<(range.length - unedited.suffix))
-                range = document.restyledRange(from: styled, edited: edited)
+                range = document.spanRange(for: edited, from: highlighted)
             }
             isHighlighting = true
             defer { isHighlighting = false }
             let style = MarkdownStyle(traits: textView.traitCollection)
             textView.updateAttributes(in: range) { storage in
-                style.paint(document, in: storage, range: range)
+                style.apply(document.spans(in: range), to: storage, in: range)
                 commentHighlighter.paint(in: storage)
             }
             textView.typingAttributes = style.typingAttributes
-            styled = document
+            highlighted = document
             unedited = nil
         }
 
@@ -270,7 +270,7 @@
             guard !isWritingToolsActive else { return }
             isComposing = textView.markedTextRange != nil
             adoptText()
-            restyle()
+            highlightEdits()
         }
 
         /// Makes the text view's text the document, counting each change once.
@@ -368,7 +368,7 @@
             guard ranges.count == 1, canFormat,
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
-            if adoptText() { restyle() }
+            if adoptText() { highlightEdits() }
             guard let edit = document.edit(typing: replacement, over: ranges[0]) else { return true }
             perform(edit)
             return false
