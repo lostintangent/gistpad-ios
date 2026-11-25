@@ -28,9 +28,9 @@ private struct ImagePicker: ViewModifier {
             }
             .alert("Couldn’t Add Image", item: $images.failure) { failure in
                 if let action = failure.action {
+                    Button(role: .cancel) {}
                     Button(action.title) { Task { await images.recover(from: failure) } }
                 }
-                Button("Cancel", role: .cancel) {}
             } message: { failure in
                 Text(failure.message)
             }
