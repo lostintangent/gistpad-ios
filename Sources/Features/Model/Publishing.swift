@@ -5,12 +5,6 @@ import Store
 // Edits publish five seconds after you stop typing, and whenever you leave a note or the app.
 // A draft lives only until GitHub has its text.
 
-public enum PublishReason: Equatable, Sendable {
-    case manual
-    case autosave
-    case background
-}
-
 extension GistPadModel {
     /// Points the open file at the gist it published to, keeping it selected under its new row.
     private func apply(published saved: GistFileDraft, gist: Gist) {
@@ -182,6 +176,12 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
+    public enum PublishReason: Equatable, Sendable {
+        case manual
+        case autosave
+        case background
+    }
+
     var isPublishing: Bool { publishing != nil }
 
     struct AutosaveRequest: Equatable {

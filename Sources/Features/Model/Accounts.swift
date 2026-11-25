@@ -7,21 +7,21 @@ import Store
 // One GitHub account at a time. Signing in as someone else signs you out first, and your drafts
 // wait on this iPhone until you sign back in.
 
-public enum Phase: Sendable {
-    case signedOut
-    case signingIn
-    /// Restoring the account and this iPhone's drafts at launch.
-    case loading
-    case ready
-    /// Reading your gists from GitHub.
-    case refreshing
-    case signingOut
-
-    /// Signing in or out, while the account may change under you.
-    public var isChangingAccount: Bool { self == .signingIn || self == .signingOut }
-}
-
 extension GistPadModel {
+    public enum Phase: Sendable {
+        case signedOut
+        case signingIn
+        /// Restoring the account and this iPhone's drafts at launch.
+        case loading
+        case ready
+        /// Reading your gists from GitHub.
+        case refreshing
+        case signingOut
+
+        /// Signing in or out, while the account may change under you.
+        public var isChangingAccount: Bool { self == .signingIn || self == .signingOut }
+    }
+
     public func start() async {
         guard phase != .signingOut else { return }
         let request = UUID()
