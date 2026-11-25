@@ -2,8 +2,8 @@
 
 A note's Markdown, read once and changed through edits. The module uses only Foundation, so
 the editor, Preview, Intelligence, Platform and Store share one reading of the same text. It's
-the note's state, not its look: highlighting and Writing Tools' protected ranges are the
-editor's, in Editor.
+the note's state, not its input or look: what a keystroke means, highlighting and Writing Tools'
+protected ranges are the editor's, in Editor.
 
 ```text
 MarkdownDocument                  a note's source, read once
@@ -42,7 +42,7 @@ Every change is a `MarkdownEdit` made by a method on the document it changes:
 
 | Group | Methods |
 |---|---|
-| Typing | `edit(typing:over:)` continues lists on Return, pairs `()`, `[]` and `{}`, and links a URL pasted over a selection. It returns nil for ordinary input, so the editor types natively. `edit(indenting:)` and `edit(outdenting:)` move list items. |
+| Lists | `edit(continuingListAt:with:)` starts the next item after a selection in a list item, numbered and boxed like it, and renumbers the siblings below. `edit(indenting:)` and `edit(outdenting:)` nest and lift items, renumbering both lists. |
 | Formatting | `edit(bolding:)`, `italicizing`, `coding`, `fencing`, `heading:over:`, `bulleting`, `numbering`, `checklisting`, `quoting` and `edit(linking:to:label:)`, which returns nil unless the destination is a complete web, email or phone link. Each toggles, so running it again removes it. |
 | Tasks | `edit(togglingTaskAt:)` checks or unchecks the box that starts exactly there, and returns nil anywhere else. |
 | Any change | `edit(replacing:with:selection:)`, for text that comes from elsewhere, like GitHub, an image upload or Intelligence. |

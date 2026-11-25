@@ -1,24 +1,6 @@
 import Foundation
 
 extension MarkdownDocument {
-    /// Smart typing: Return continues a list, brackets pair, and a URL pasted over text links it.
-    /// Nil for ordinary input or protected syntax, so the caller types natively.
-    public func edit(typing replacement: String, over selection: NSRange) -> MarkdownEdit? {
-        if ["\n", "\r", "\r\n"].contains(replacement) {
-            return isProtected(selection) ? nil : continuingList(at: selection)
-        }
-        if let edit = pairingBracket(replacement, over: selection) {
-            return isProtected(selection) ? nil : edit
-        }
-        let selected = source.substring(with: selection)
-        guard !selected.isEmpty, !selected.allSatisfy(\.isWhitespace),
-            replacement.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil,
-            ["http", "https"].contains(URL(string: replacement)?.scheme?.lowercased()),
-            !isProtected(selection)
-        else { return nil }
-        return edit(linking: selection, to: replacement, label: selected)
-    }
-
     /// Indents the selected lines, nesting a list item under the one above it.
     public func edit(indenting selection: NSRange, keeping kept: NSRange? = nil) -> MarkdownEdit? {
         indenting(selection, outdent: false, keeping: kept ?? selection)
@@ -35,72 +17,30 @@ extension MarkdownDocument {
         return listItem(at: min(location, max(0, source.length - 1))) != nil
     }
 
-    private static let brackets = [
-        (open: "(", close: ")"), (open: "[", close: "]"), (open: "{", close: "}"),
-    ]
-    private static let closesBefore = CharacterSet.whitespacesAndNewlines
-        .union(CharacterSet(charactersIn: ")]}.,;:!?"))
-
-    /// An opener closes before a space, a line end or a closer, so one typed before a word stays
-    /// single. Its closer steps over a waiting one, and backspace in an empty pair deletes both.
-    private func pairingBracket(_ replacement: String, over selection: NSRange) -> MarkdownEdit? {
-        let caret = NSMaxRange(selection)
-        let next = caret < source.length ? source.substring(with: NSRange(location: caret, length: 1)) : ""
-        if replacement.isEmpty, selection.length == 1,
-            let pair = Self.brackets.first(where: { $0.open == source.substring(with: selection) }),
-            next == pair.close
-        {
-            return edit(
-                replacing: NSRange(location: selection.location, length: 2), with: "",
-                selection: NSRange(location: selection.location, length: 0))
-        }
-        guard selection.length == 0 else { return nil }
-        if let pair = Self.brackets.first(where: { $0.open == replacement }),
-            next.isEmpty || next.rangeOfCharacter(from: Self.closesBefore) != nil
-        {
-            return edit(
-                replacing: selection, with: pair.open + pair.close,
-                selection: NSRange(location: caret + 1, length: 0))
-        }
-        // When the line already balances its closers, the one after the caret is waiting for this one.
-        if let pair = Self.brackets.first(where: { $0.close == replacement }), next == pair.close {
-            let line = source.substring(with: source.lineRange(for: selection))
-            guard line.count(where: { String($0) == pair.open }) <= line.count(where: { String($0) == pair.close })
-            else { return nil }
-            return edit(replacing: selection, with: "", selection: NSRange(location: caret + 1, length: 0))
-        }
-        return nil
-    }
-
-    /// Return in a list item starts the next one, and in an empty item ends the list.
-    private func continuingList(at selection: NSRange) -> MarkdownEdit? {
+    /// Starts the item after `selection`'s, splitting its line there, with `text` after the new
+    /// item's marker. The new item takes the next number, and an open box when this one has a box,
+    /// and the numbered siblings below renumber. Nil outside an unquoted list item in prose, before
+    /// its text, or past its line.
+    public func edit(continuingListAt selection: NSRange, with text: String = "") -> MarkdownEdit? {
         let line = source.line(at: selection.location)
         guard NSMaxRange(selection) <= line.contentsEnd, let item = listItem(on: line),
-            selection.location >= NSMaxRange(item.prefix)
+            selection.location >= NSMaxRange(item.prefix), !isLiteral(selection)
         else { return nil }
-        let text = NSRange(location: NSMaxRange(item.prefix), length: line.contentsEnd - NSMaxRange(item.prefix))
-        if source.isBlank(text) {
-            return edit(
-                replacing: line.contents, with: "", selection: NSRange(location: line.range.location, length: 0))
-        }
-        let box = item.box == nil ? "" : "[ ]" + (item.boxSpacing.isEmpty ? " " : item.boxSpacing)
         let newline =
             line.hasTerminator
             ? source.substring(with: NSRange(line.contentsEnd..<NSMaxRange(line.range)))
             : lineBreak
-        guard let number = item.number else {
-            let next = newline + item.indent + (item.bullet ?? "") + item.spacing + box
-            return edit(
-                replacing: selection, with: next,
-                selection: NSRange(location: selection.location + next.utf16.count, length: 0))
+        let box = item.box == nil ? "" : "[ ]" + (item.boxSpacing.isEmpty ? " " : item.boxSpacing)
+        var marker = item.bullet ?? ""
+        var renumbering: [Change] = []
+        if let number = item.number {
+            guard number < 999_999_999 else { return nil }
+            marker = String(number + 1) + item.delimiter
+            renumbering = renumberingSiblings(
+                from: NSMaxRange(line.range), indent: item.indent, delimiter: item.delimiter, start: number + 2)
         }
-        guard number < 999_999_999 else { return nil }
-        let next = newline + item.indent + String(number + 1) + item.delimiter + item.spacing + box
         return edit(
-            changes: [(selection, next)]
-                + renumberingSiblings(
-                    from: NSMaxRange(line.range), indent: item.indent, delimiter: item.delimiter,
-                    start: number + 2),
+            changes: [(selection, newline + item.indent + marker + item.spacing + box + text)] + renumbering,
             selection: NSRange(location: NSMaxRange(selection), length: 0))
     }
 
