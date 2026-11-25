@@ -20,9 +20,9 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - Something that waits for GitHub says when it can happen, like **You can add images after this gist publishes.**
 - A busy editor says **Finish typing or wait for Writing Tools, then try again.** Text that moved under a selection says **This file changed. Select the text again.**
 - Inserted pictures are **images**, never "photos".
-- Recovery buttons say **Try Again**.
-- Every sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
-- Buttons, `ContentUnavailableView` titles and alert titles are title case. An alert title that asks a question is a sentence, like **Discard tag changes?** Messages are sentence case, end with a period and use contractions, never "cannot".
+- A failure says what's true in one sentence and leaves the fix to one button: **Try Again** when GitHub may answer next time, **Reconnect GitHub** when it needs you to sign in again, and none when neither would help. Anything that isn't GistPad's own error, offline included, says **GitHub couldn’t be reached.**, never the system's wording. The app's alert makes that sentence its title, with no app name, and offers Reconnect GitHub when that's the fix, otherwise OK.
+- Every first sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
+- Buttons, `ContentUnavailableView` titles and alert titles are title case. An alert title that's a sentence keeps sentence case and its punctuation, like **Discard tag changes?** Messages are sentence case, end with a period and use contractions, never "cannot".
 - Copy uses the typographic apostrophe (’), as the system's own strings do, never the typewriter one (').
 - Failures use `exclamationmark.circle`.
 - Menu items and buttons never end with "…", even when they open a dialog or sheet. Progress text like "Answering…" keeps it.
@@ -46,7 +46,7 @@ Opening a file:
 
 - **Cached:** the real words at once, offline too. No skeleton, flash or previous file.
 - **Uncached:** its whole bar at once, title capsule, Mode, Comments and More, sliding in with the push, then one plain `ProgressView` after 350 ms. The words arrive under a bar that doesn't change.
-- **Failed:** the same bar over **Couldn’t Open This File**, the reason and Try Again. Preview's own failure says **Preview Unavailable**.
+- **Failed:** the same bar over **Couldn’t Open This File**, the reason and its button. Preview's own failure says **Preview Unavailable**.
 
 ## Library
 
@@ -80,8 +80,7 @@ The system **Edit** button leads the top of the Library in both layouts, giving 
 | --- | --- |
 | Signed out | **Welcome to GistPad** / Your knowledge and daily notes, kept in GitHub gists. / Sign in with GitHub |
 | No gists | **No Gists Yet** / A thought, a list, a little thing worth keeping. Start your first gist. / New Gist |
-| Load failed | **Couldn’t Load Your Gists** / GitHub couldn’t be reached. Your gists will appear once it answers. / Try Again |
-| Sign-in lapsed | **Reconnect GitHub** / Sign in with GitHub again to see your gists. / Sign in with GitHub |
+| Load failed | **Couldn’t Load Your Gists** / the failure's sentence / its button |
 
 When one of these explains a problem, **GitHub needs attention** stays out of the toolbar, so the problem is said once. With gists still listed, or while a filter or search shows nothing, the toolbar control carries it.
 
@@ -95,7 +94,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 **Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker. Switching to Preview with the keyboard up shows the page at rest while the keyboard drops.
 
-**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn’t check for changes", with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
+**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn’t check for changes", with the reason and its button. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
 
 **More**, in native sections:
 
