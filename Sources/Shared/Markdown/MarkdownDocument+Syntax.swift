@@ -149,24 +149,6 @@ extension MarkdownDocument {
         }
     }
 
-    /// The note's prose on one line, up to 160 characters: its paragraphs and the text of its list
-    /// items, without headings, tasks, tables or code. Nil when the note has none.
-    public var excerpt: String? {
-        let prose = blocks.compactMap { block -> NSRange? in
-            switch block.kind {
-            case .paragraph: block.range
-            case .listItem where block.box == nil:
-                block.prefix.map { NSRange(NSMaxRange($0)..<NSMaxRange(block.range)) }
-            default: nil
-            }
-        }
-        let excerpt = prose.flatMap { source.substring(with: $0).split(whereSeparator: \.isNewline) }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return excerpt.isEmpty ? nil : String(excerpt.prefix(160))
-    }
-
     /// Every task outside code and front matter, quoted ones included: the list items with a box.
     public var tasks: [ListItem] {
         proseRuns.flatMap { run in

@@ -87,6 +87,19 @@ struct MarkdownDocumentTests {
         #expect(headings.first?.level == 2)
     }
 
+    @Test(arguments: [
+        ("# Thanksgiving menu\n\nTwelve at the table this year,\nand dinner's at **4**.",
+         "Thanksgiving menu\nTwelve at the table this year, and dinner's at 4."),
+        ("| Dish | Who |\n| --- | :---: |\n| Turkey and gravy | Me |", "Dish\tWho\nTurkey and gravy\tMe"),
+        ("> The turkey goes in at 10:30,\n> so the oven's free", "The turkey goes in at 10:30, so the oven's free"),
+        ("- [ ] Brine the turkey\n2. Borrow Mom's [gravy boat](https://example.com)",
+         "Brine the turkey\nBorrow Mom's gravy boat"),
+        ("```swift\nlet *x* = 1\n```", "let *x* = 1"),
+    ])
+    func theRenderedTextReadsLikePreview(source: String, rendered: String) {
+        #expect(String(MarkdownDocument(source).renderedText.characters) == rendered)
+    }
+
     @Test func anExcerptIsTheProseOnOneLineWithoutHeadingsTasksTablesOrCode() {
         let source = """
             ---
@@ -103,9 +116,10 @@ struct MarkdownDocumentTests {
             # not a heading
             ```
             * butter
-              and jam
+              and **jam**
+            > From [Mom](https://example.com)
             """
-        #expect(MarkdownDocument(source).excerpt == "Buy these before Friday. milk butter and jam")
+        #expect(MarkdownDocument(source).excerpt == "Buy these before Friday. milk butter and jam From Mom")
         #expect(MarkdownDocument("# Only a heading\n- [ ] A task\n").excerpt == nil)
         #expect(MarkdownDocument(String(repeating: "word ", count: 50)).excerpt?.count == 160)
     }

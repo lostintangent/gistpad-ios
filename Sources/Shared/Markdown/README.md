@@ -19,7 +19,8 @@ MarkdownDocument                  a note's source, read once
   listItem(at:) -> ListItem       the list item on a line: prefix, marker, number and box
   quoteMarker(at:)                the marker that quotes a line
   headingMarker(at:)              the marker that makes a line a heading
-  excerpt                         the prose on one line, for a snippet
+  renderedText                    the text as Preview renders it, for a citation
+  excerpt                         its prose on one line, for a snippet
   tasks                           every list item with a box
   edit(…) -> MarkdownEdit         every change, made from this document
 
