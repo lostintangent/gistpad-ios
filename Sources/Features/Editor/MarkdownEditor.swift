@@ -93,21 +93,23 @@
             let replaced = source.substring(with: edit.range)
             let replacement = edit.replacement
             let changed = NSRange(location: edit.range.location, length: replacement.utf16.count)
+            let delta = replacement.utf16.count - edit.range.length
+            let selection: NSRange? =
+                if let selection = edit.selection {
+                    selection
+                } else if NSMaxRange(previousSelection) <= edit.range.location {
+                    previousSelection
+                } else if previousSelection.location >= NSMaxRange(edit.range) {
+                    NSRange(location: previousSelection.location + delta, length: previousSelection.length)
+                } else {
+                    nil
+                }
             let undo = textView.undoManager
             undo?.beginUndoGrouping()
             // Source transactions bypass input substitutions and restore the exact source and selection.
             undo?.disableUndoRegistration()
             textView.textStorage.replaceCharacters(in: edit.range, with: replacement)
-            adoptText()
-            let delta = replacement.utf16.count - edit.range.length
-            if let selection = edit.selection {
-                textView.selectedRange = selection
-            } else if NSMaxRange(previousSelection) <= edit.range.location {
-                textView.selectedRange = previousSelection
-            } else if previousSelection.location >= NSMaxRange(edit.range) {
-                textView.selectedRange = NSRange(
-                    location: previousSelection.location + delta, length: previousSelection.length)
-            }
+            adoptText(selecting: selection)
             undo?.enableUndoRegistration()
             undo?.registerUndo(withTarget: self) { editor in
                 // Undo puts back what the edit replaced, while the edit's own text is still there.
@@ -280,14 +282,16 @@
             highlightEdits()
         }
 
-        /// Makes the text view's text the document, counting each change once.
+        /// Makes the text view's text the document, counting each change once. An edit's selection
+        /// lands before `onEdit` hears of it, and after hidden front matter moves to the new text.
         @discardableResult
-        private func adoptText() -> Bool {
+        private func adoptText(selecting selection: NSRange? = nil) -> Bool {
             let text: String = textView.text
             guard !(document.text as NSString).isEqual(to: text) else { return false }
             document = MarkdownDocument(text)
-            updateHiddenFrontMatter()
             generation += 1
+            updateHiddenFrontMatter()
+            if let selection { textView.selectedRange = selection }
             textView.requestEditingCaretReveal()
             onEdit?(document.text, generation)
             return true
