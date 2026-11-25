@@ -377,7 +377,7 @@
                 rememberReadingAnchor()
             }
             editor?.commentAnnotator.layoutBackgrounds()
-            editor?.commentAnnotator.scrollSelectedCommentIfNeeded()
+            editor?.commentAnnotator.revealPendingThread()
         }
 
         // Platform gap: TextKit 2 estimates the height of text it hasn't laid out, which leaves scroll

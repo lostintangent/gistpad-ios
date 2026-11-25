@@ -1,6 +1,7 @@
 #if canImport(UIKit)
     import Appearance
     import AppIntents
+    import Comments
     import Markdown
     import Observation
     import UIKit
@@ -17,6 +18,12 @@
         private(set) var isWritingToolsActive = false
         private(set) var showsFrontMatter = false
         private(set) var contentStart = 0
+        /// The note's comments, which the editor marks in the text. Nil when the note can't have any.
+        @ObservationIgnored var comments: DocumentComments? {
+            didSet { if comments != oldValue { commentAnnotator.commentsDidChange(from: oldValue) } }
+        }
+        /// The threads whose quoted passages the note contains, once it has marked its comments.
+        public internal(set) var matchedThreadIDs: Set<Int64>?
         var inputError: Failure?
         let textView = TextView(usingTextLayoutManager: true)
         @ObservationIgnored weak var host: TextViewHost?

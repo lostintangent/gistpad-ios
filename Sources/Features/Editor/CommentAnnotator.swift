@@ -9,8 +9,9 @@
         static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.annotation")
         private unowned let editor: MarkdownEditor
         let backgroundLayer = CALayer()
-        private var comments: CommentAnnotations?
-        private var linkedIDs: Set<Int64>?
+        var openThreads: @MainActor ([Int64]) -> Void = { _ in }
+        var addComment: @MainActor (String) -> Void = { _ in }
+        private var matchedIDs: Set<Int64>?
         private var passages: [(annotation: CommentQuote.Match, fill: UIColor, selected: Bool)] = []
         private var verifiedAnnotations: [CommentQuote.Match] = []
         private var originalInk: [(range: NSRange, color: Any)] = []
@@ -23,7 +24,7 @@
         private(set) var pendingFindUpdate: Task<Void, Never>?
         private(set) var publication: Task<Void, Never>?
         private(set) var scrollTask: Task<Void, Never>?
-        private var needsSelectedScroll = false
+        private var pendingReveal: Int64?
         private var onSelected = UIColor.label
         private lazy var tap = UITapGestureRecognizer(
             target: self, action: #selector(openTappedPassage))
@@ -45,24 +46,18 @@
             editor.textView.addGestureRecognizer(tap)
         }
 
-        var quotes: [CommentQuote] { comments?.quotes ?? [] }
+        var quotes: [CommentQuote] { editor.comments?.quotes ?? [] }
 
-        func configure(_ comments: CommentAnnotations?) {
-            let needsInitialReport = self.comments == nil && comments != nil
-            if self.comments?.selectedThreadID != comments?.selectedThreadID
-                || self.comments?.revealRevision != comments?.revealRevision
-            {
-                needsSelectedScroll = comments?.selectedThreadID != nil
-                scrollTask?.cancel()
-                scrollTask = nil
-            }
-            let changed = self.comments != comments
-            let wasQuoting = !quotes.isEmpty
-            self.comments = comments
+        func commentsDidChange(from old: DocumentComments?) {
             // A note without quoted passages looks the same with or without comments.
-            if changed, wasQuoting || !quotes.isEmpty { editor.highlight() }
-            if needsInitialReport { publish(linkedIDs ?? [], force: true) }
-            scrollSelectedCommentIfNeeded()
+            if old?.quotes.isEmpty == false || !quotes.isEmpty { editor.highlight() }
+        }
+
+        func reveal(_ threadID: Int64) {
+            pendingReveal = threadID
+            scrollTask?.cancel()
+            scrollTask = nil
+            revealPendingThread()
         }
 
         func annotate(_ storage: NSTextStorage) {
@@ -73,9 +68,9 @@
             let annotations = quotes.matches(in: [editor.document.text])
                 .filter { $0.start >= editor.contentStart }
             verifiedAnnotations = annotations
-            publish(Set(annotations.flatMap(\.threadIDs)))
+            publish(editor.comments.map { _ in Set(annotations.flatMap(\.threadIDs)) })
             updateAccessibility()
-            guard let comments, !annotations.isEmpty, !isSuspended else {
+            guard let comments = editor.comments, !annotations.isEmpty, !isSuspended else {
                 backgroundLayer.sublayers = nil
                 return
             }
@@ -86,7 +81,7 @@
             let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits))
             for annotation in annotations {
                 let selected = comments.selectedThreadID.map(annotation.threadIDs.contains) ?? false
-                guard comments.showsInlineComments || selected else { continue }
+                guard comments.showsAll || selected else { continue }
                 let fill: UIColor
                 if selected {
                     fill = roles.fill.uiColor
@@ -112,7 +107,7 @@
                     ], range: annotation.range)
             }
             applySelectedInk(in: storage)
-            scrollSelectedCommentIfNeeded()
+            revealPendingThread()
         }
 
         /// Comment fills are the only source ink that follows the personal accent.
@@ -226,7 +221,7 @@
         }
 
         private func addAction(ranges: [NSRange]) -> UIAction? {
-            guard comments != nil, !isSuspended,
+            guard editor.comments != nil, !isSuspended,
                 ranges.count == 1, let range = ranges.first, editor.isSettled,
                 case let quote = (editor.document.text as NSString).substring(with: range),
                 CommentQuote.isQuotable(quote)
@@ -235,17 +230,17 @@
                 title: String(localized: "Add Comment", bundle: .module),
                 image: UIImage(systemName: "text.bubble")
             ) { [weak self] _ in
-                self?.comments?.add(quote)
+                self?.addComment(quote)
             }
         }
 
         private func openAction(ids: [Int64]) -> UIAction? {
-            guard !ids.isEmpty, comments != nil else { return nil }
+            guard !ids.isEmpty, editor.comments != nil else { return nil }
             return UIAction(
                 title: String(localized: "View Comment", bundle: .module),
                 image: UIImage(systemName: "text.bubble")
             ) { [weak self] _ in
-                self?.comments?.open(ids)
+                self?.openThreads(ids)
             }
         }
 
@@ -264,7 +259,7 @@
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
             -> Bool
         {
-            guard !editor.textView.isFirstResponder, comments != nil, !isSuspended, editor.isSettled
+            guard !editor.textView.isFirstResponder, editor.comments != nil, !isSuspended, editor.isSettled
             else { return false }
             let ids = threadIDs(at: touch.location(in: editor.textView))
             pendingTap = ids.isEmpty ? nil : ids
@@ -319,7 +314,7 @@
         @objc private func openTappedPassage() {
             guard let pendingTap else { return }
             self.pendingTap = nil
-            comments?.open(pendingTap)
+            openThreads(pendingTap)
         }
 
         @objc private func selectTappedWord() {
@@ -334,8 +329,8 @@
             view.select(nil)
         }
 
-        func scrollSelectedCommentIfNeeded() {
-            guard needsSelectedScroll, !isSuspended, editor.textView.window != nil,
+        func revealPendingThread() {
+            guard pendingReveal != nil, !isSuspended, editor.textView.window != nil,
                 !editor.textView.isHidden, scrollTask == nil,
                 editor.textView.bounds.width > 0, editor.textView.bounds.height > 0
             else { return }
@@ -343,14 +338,13 @@
                 await Task.yield()
                 guard !Task.isCancelled, let self else { return }
                 defer { if !Task.isCancelled { self.scrollTask = nil } }
-                guard self.needsSelectedScroll, !self.isSuspended, self.editor.isSettled,
-                    let selectedID = self.comments?.selectedThreadID,
+                guard let threadID = self.pendingReveal, !self.isSuspended, self.editor.isSettled,
                     let annotation = self.verifiedAnnotations.first(where: {
-                        $0.threadIDs.contains(selectedID)
+                        $0.threadIDs.contains(threadID)
                     }),
                     self.editor.textView.window != nil, !self.editor.textView.isHidden
                 else { return }
-                self.needsSelectedScroll = false
+                self.pendingReveal = nil
                 self.editor.textView.revealPassage(annotation.range)
             }
         }
@@ -436,7 +430,7 @@
         private func updateAccessibility() {
             let view = editor.textView
             guard !isSuspended,
-                let selectedID = comments?.selectedThreadID,
+                let selectedID = editor.comments?.selectedThreadID,
                 verifiedAnnotations.contains(where: { $0.threadIDs.contains(selectedID) }),
                 let quote = quotes.first(where: { $0.threadID == selectedID })?.quote
             else {
@@ -450,15 +444,23 @@
             view.accessibilityCustomContent = [content]
         }
 
-        private func publish(_ ids: Set<Int64>, force: Bool = false) {
-            guard force || linkedIDs != ids else { return }
-            linkedIDs = ids
+        /// Hands the editor the threads it matched once the update that matched them ends.
+        private func publish(_ ids: Set<Int64>?) {
+            guard matchedIDs != ids else { return }
+            matchedIDs = ids
             publication?.cancel()
             publication = Task { [weak self] in
                 guard !Task.isCancelled, let self else { return }
                 self.publication = nil
-                self.comments?.linked(ids)
+                self.editor.matchedThreadIDs = ids
             }
+        }
+    }
+
+    extension MarkdownEditor {
+        /// Scrolls a thread's quoted passage into view, once the editor shows it.
+        public func revealThread(_ id: Int64) {
+            commentAnnotator.reveal(id)
         }
     }
 #endif

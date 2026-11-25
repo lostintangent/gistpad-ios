@@ -11,27 +11,35 @@
         private let title: String?
         private let insertImage: (@MainActor () -> Void)?
         private let intelligence: (@MainActor () -> Void)?
-        private let comments: CommentAnnotations?
+        private let comments: DocumentComments?
+        private let openThreads: @MainActor ([Int64]) -> Void
+        private let addComment: @MainActor (String) -> Void
         @State private var linkRequest: LinkRequest?
 
+        /// Tapping a quoted passage hands its threads to `openThreads`, and Add Comment hands the
+        /// selected text to `addComment`.
         public init(
             editor: MarkdownEditor,
             title: String? = nil,
             insertImage: (@MainActor () -> Void)? = nil,
             intelligence: (@MainActor () -> Void)? = nil,
-            comments: CommentAnnotations? = nil
+            comments: DocumentComments? = nil,
+            openThreads: @escaping @MainActor ([Int64]) -> Void = { _ in },
+            addComment: @escaping @MainActor (String) -> Void = { _ in }
         ) {
             self.editor = editor
             self.title = title
             self.insertImage = insertImage
             self.intelligence = intelligence
             self.comments = comments
+            self.openThreads = openThreads
+            self.addComment = addComment
         }
 
         public var body: some View {
             TextViewRepresentable(
                 editor: editor, title: title,
-                comments: comments,
+                comments: comments, openThreads: openThreads, addComment: addComment,
                 actions: KeyboardBarActions(
                     canFormat: editor.canFormat,
                     format: format, link: beginLink, indent: { editor.indent(outdent: $0) },
@@ -65,7 +73,9 @@
     private struct TextViewRepresentable: UIViewRepresentable {
         let editor: MarkdownEditor
         let title: String?
-        let comments: CommentAnnotations?
+        let comments: DocumentComments?
+        let openThreads: @MainActor ([Int64]) -> Void
+        let addComment: @MainActor (String) -> Void
         let actions: KeyboardBarActions
         @Environment(\.isPaneVisible) private var isPaneVisible
         @Environment(\.accent) private var accent
@@ -94,7 +104,9 @@
                     if view.isFirstResponder { view.reloadInputViews() }
                 }
                 view.traitOverrides[AccentTrait.self] = accent
-                editor.commentAnnotator.configure(comments)
+                editor.commentAnnotator.openThreads = openThreads
+                editor.commentAnnotator.addComment = addComment
+                editor.comments = comments
             }
             host.isPaneVisible = isPaneVisible
         }
@@ -170,7 +182,7 @@
             configuration = nil
             updateOwnership()
             guard editor.host == nil, editor.textView.superview === self else { return }
-            editor.commentAnnotator.configure(nil)
+            editor.comments = nil
             editor.textView.inputAccessoryView = nil
             editor.textView.removeFromSuperview()
         }

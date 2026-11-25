@@ -364,7 +364,9 @@ struct RootView: View {
                 ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
                 : nil,
             intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
-            comments: comments.annotations(for: fileEditor))
+            comments: comments.documentComments(for: fileEditor),
+            openThreads: { comments.openThreads($0, in: fileEditor, origin: .edit) },
+            addComment: { comments.addComment(quoting: $0, in: fileEditor, origin: .edit) })
     }
 
     private func preview(_ fileEditor: GistFileEditor) -> some View {
@@ -373,7 +375,7 @@ struct RootView: View {
             comments: comments.documentComments(for: fileEditor), scrollPosition: comments.previewPosition,
             openThreads: { comments.openThreads($0, in: fileEditor, origin: .preview) },
             addComment: { comments.addComment(quoting: $0, in: fileEditor, origin: .preview) },
-            matched: { comments.matched($0, in: fileEditor, origin: .preview) },
+            matched: { comments.matchedInPreview($0, in: fileEditor) },
             openWikilink: { target in
                 if let gist = model.state.gists.first(where: {
                     $0.title.localizedStandardCompare(target) == .orderedSame

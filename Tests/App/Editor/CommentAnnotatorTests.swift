@@ -11,8 +11,7 @@ struct CommentAnnotatorTests {
         let editor = MarkdownEditor(text: "A native note\n")
         let window = try host(editor)
         defer { window.isHidden = true }
-        editor.commentAnnotator.configure(
-            annotations([CommentQuote(threadID: 10, quote: "native")]))
+        editor.comments = DocumentComments(quotes: [CommentQuote(threadID: 10, quote: "native")])
         editor.textView.layoutIfNeeded()
         #expect(editor.commentAnnotator.backgroundLayer.sublayers?.isEmpty == false)
         editor.textView.selectedRange = NSRange(location: editor.document.text.utf16.count, length: 0)
@@ -42,9 +41,8 @@ struct CommentAnnotatorTests {
         let selection = editor.textView.selectedRange
         var changes = 0
         editor.onEdit = { _, _ in changes += 1 }
-        editor.commentAnnotator.configure(
-            annotations(
-                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        editor.comments = DocumentComments(
+            quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10)
         editor.highlight()
         #expect(editor.document.text == "The native note")
         #expect(editor.generation == 8)
@@ -65,11 +63,11 @@ struct CommentAnnotatorTests {
     @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
         let editor = MarkdownEditor(text: "one two three")
         var opened: [[Int64]] = []
-        editor.commentAnnotator.configure(
-            annotations([
-                CommentQuote(threadID: 10, quote: "one two"),
-                CommentQuote(threadID: 20, quote: "two three"),
-            ], open: { opened.append($0) }))
+        editor.commentAnnotator.openThreads = { opened.append($0) }
+        editor.comments = DocumentComments(quotes: [
+            CommentQuote(threadID: 10, quote: "one two"),
+            CommentQuote(threadID: 20, quote: "two three"),
+        ])
         #expect(
             editor.textView.textStorage.attribute(
                 CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) != nil)
@@ -106,11 +104,11 @@ struct CommentAnnotatorTests {
         let window = try host(editor, focused: false)
         defer { window.isHidden = true }
         var quotes: [String] = []
-        editor.commentAnnotator.configure(
-            annotations([
-                CommentQuote(threadID: 10, quote: "quiet native"),
-                CommentQuote(threadID: 20, quote: "native note"),
-            ], add: { quotes.append($0) }))
+        editor.commentAnnotator.addComment = { quotes.append($0) }
+        editor.comments = DocumentComments(quotes: [
+            CommentQuote(threadID: 10, quote: "quiet native"),
+            CommentQuote(threadID: 20, quote: "native note"),
+        ])
         editor.textView.layoutIfNeeded()
         let range = (source as NSString).range(of: "native")
         let start = try #require(
@@ -147,7 +145,7 @@ struct CommentAnnotatorTests {
         #expect(editor.textView.selectedRange == selection)
     }
 
-    @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
+    @Test func aRevealWaitsForItsPassageAndCanReturnToItWithoutChangingSource() async throws {
         let text =
             "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
             + "A late native passage."
@@ -155,32 +153,35 @@ struct CommentAnnotatorTests {
         let window = try host(editor)
         defer { window.isHidden = true }
         editor.textView.resignFirstResponder()
-        var comments = annotations(
-            [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60)
-        editor.commentAnnotator.configure(comments)
+        let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
+        editor.revealThread(60)
+        await editor.commentAnnotator.scrollTask?.value
+        #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
+        let comments = DocumentComments(
+            quotes: [CommentQuote(threadID: 60, quote: "late native passage")],
+            selectedThreadID: 60)
+        editor.comments = comments
         await editor.commentAnnotator.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
-        let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
         editor.textView.setContentOffset(top, animated: false)
-        editor.commentAnnotator.configure(comments)
+        editor.comments = comments
         editor.textView.layoutIfNeeded()
         #expect(editor.commentAnnotator.scrollTask == nil)
         #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
-        comments.revealRevision += 1
-        editor.commentAnnotator.configure(comments)
+        editor.revealThread(60)
         await editor.commentAnnotator.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         #expect(editor.document.text == text)
         #expect(editor.generation == 0)
     }
 
-    @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
+    @Test func addCommentRequiresCommentsAndOneEligibleSelection() {
         let editor = MarkdownEditor(text: "abc abcd 🫧🫧")
         let range = NSValue(range: NSRange(location: 4, length: 4))
         #expect(
             editor.textView(
                 editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        editor.commentAnnotator.configure(annotations([]))
+        editor.comments = DocumentComments()
         #expect(
             editor.textView(
                 editor.textView,
@@ -201,12 +202,11 @@ struct CommentAnnotatorTests {
 
     @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
         let editor = MarkdownEditor(text: "one two three")
-        editor.commentAnnotator.configure(
-            annotations(
-                [
-                    CommentQuote(threadID: 10, quote: "one two"),
-                    CommentQuote(threadID: 20, quote: "two three"),
-                ], selectedThreadID: 20, showsInlineComments: false))
+        editor.comments = DocumentComments(
+            quotes: [
+                CommentQuote(threadID: 10, quote: "one two"),
+                CommentQuote(threadID: 20, quote: "two three"),
+            ], selectedThreadID: 20, showsAll: false)
         #expect(
             editor.textView.textStorage.attribute(
                 CommentAnnotator.annotationKey, at: 1, effectiveRange: nil) == nil)
@@ -220,27 +220,28 @@ struct CommentAnnotatorTests {
         #expect(menu != nil)
     }
 
-    @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
+    @Test func matchesOnlyUniqueVisiblePassagesAndForgetsThemWhenCommentsClose() async {
         let editor = MarkdownEditor(text: "---\ntitle: native\n---\n\nA native note")
-        var linked: Set<Int64> = []
-        editor.commentAnnotator.configure(
-            annotations([
-                CommentQuote(threadID: 10, quote: "native"),
-                CommentQuote(threadID: 20, quote: "title: native"),
-                CommentQuote(threadID: 30, quote: "missing"),
-                CommentQuote(threadID: 40, quote: "native note"),
-            ], linked: { linked = $0 }))
+        editor.comments = DocumentComments(quotes: [
+            CommentQuote(threadID: 10, quote: "native"),
+            CommentQuote(threadID: 20, quote: "title: native"),
+            CommentQuote(threadID: 30, quote: "missing"),
+            CommentQuote(threadID: 40, quote: "native note"),
+        ])
         await editor.commentAnnotator.publication?.value
-        #expect(linked == [40])
+        #expect(editor.matchedThreadIDs == [40])
         #expect(
             editor.textView.textStorage.attribute(
                 CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) == nil)
         editor.setShowsFrontMatter(true)
         await editor.commentAnnotator.publication?.value
-        #expect(linked == [20, 40])
+        #expect(editor.matchedThreadIDs == [20, 40])
         #expect(
             editor.textView.textStorage.attribute(
                 CommentAnnotator.annotationKey, at: 5, effectiveRange: nil) != nil)
+        editor.comments = nil
+        await editor.commentAnnotator.publication?.value
+        #expect(editor.matchedThreadIDs == nil)
     }
 
     @Test func annotationsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
@@ -252,8 +253,8 @@ struct CommentAnnotatorTests {
             view.textStorage.attribute(CommentAnnotator.annotationKey, at: 3, effectiveRange: nil)
                 != nil
         }
-        editor.commentAnnotator.configure(
-            annotations([CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        editor.comments = DocumentComments(
+            quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10)
         #expect(annotated())
         editor.textViewWritingToolsWillBegin(view)
         #expect(editor.isWritingToolsActive)
@@ -282,25 +283,13 @@ struct CommentAnnotatorTests {
     @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
         let editor = MarkdownEditor(text: "A native note")
         let provider: any AXCustomContentProvider = editor.textView
-        editor.commentAnnotator.configure(
-            annotations(
-                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+        editor.comments = DocumentComments(
+            quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10)
         let content = try #require(provider.accessibilityCustomContent.first)
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        editor.commentAnnotator.configure(nil)
+        editor.comments = nil
         #expect(provider.accessibilityCustomContent.isEmpty)
-    }
-
-    private func annotations(
-        _ quotes: [CommentQuote], selectedThreadID: Int64? = nil, showsInlineComments: Bool = true,
-        open: @escaping @MainActor ([Int64]) -> Void = { _ in },
-        linked: @escaping @MainActor (Set<Int64>) -> Void = { _ in },
-        add: @escaping @MainActor (String) -> Void = { _ in }
-    ) -> CommentAnnotations {
-        CommentAnnotations(
-            quotes: quotes, selectedThreadID: selectedThreadID, showsInlineComments: showsInlineComments,
-            open: open, linked: linked, add: add)
     }
 }
