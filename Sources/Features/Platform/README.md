@@ -11,16 +11,17 @@ needs the web's `apple-app-site-association` file deployed first.
 
 ## System surfaces
 
-`GistEntity` is an `IndexedEntity`, one per Markdown file, with its title, tags
+`GistFileEntity` is an `IndexedEntity`, one per Markdown file, with its title, tags
 and a snippet, indexed with complete file protection. Each one names its file,
-the gist's default file included, and opens that file. `GistEntityQuery`
+the gist's default file included, and opens that file. `GistFileQuery`
 resolves identifiers and strings for the signed-in account and answers the
-system's reindex requests.
+system's reindex requests. The entity keeps its first identifier, `GistEntity`,
+so saved Shortcuts and Spotlight items still resolve.
 The app updates the index in the background after each snapshot, so nothing
 waits on Spotlight, and deletes just the files that went away since the last
 one, including while the app wasn't running.
 
-`GistEntity` also adopts the iOS 27 notes schema. Each Markdown file is a
+`GistFileEntity` also adopts the iOS 27 notes schema. Each Markdown file is a
 note in its gist's `GistFolderEntity`, under the active `GistAccountEntity`.
 RootView names the displayed file as the entity of the editor, the preview and
 a foreground `NSUserActivity`. Only a query for that note while GistPad is

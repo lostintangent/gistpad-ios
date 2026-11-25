@@ -5,10 +5,10 @@ import Store
 public struct LibrarySnapshot: Codable, Sendable {
     public let accountID: UUID?
     let accentHex: String?
-    public let gists: [GistEntity]
+    public let files: [GistFileEntity]
     /// The widget's recent gists: your own, newest edit anywhere in the gist first, without daily
     /// notes or archived gists.
-    let recents: [GistEntity]
+    let recents: [GistFileEntity]
 }
 
 extension LibrarySnapshot {
@@ -20,28 +20,28 @@ extension LibrarySnapshot {
         accountID = account?.id
         accentHex = account?.preferences.accentColor
         guard let account else {
-            gists = []
+            files = []
             recents = []
             return
         }
         func note(
             _ title: String, text: String?, updatedAt: Date, link: GistPadLink, in gist: Gist?
-        ) -> GistEntity {
-            GistEntity(
+        ) -> GistFileEntity {
+            GistFileEntity(
                 title: title, excerpt: Self.excerpt(text.map(visibleText)),
                 tags: gist.map { account.preferences.tagNames(gistID: $0.id) } ?? [],
                 updatedAt: updatedAt, link: link, accountID: account.id,
                 folderName: gist?.displayName,
                 pinned: gist.map { account.preferences.pinnedGists.contains($0.id) } ?? false)
         }
-        var gists: [GistEntity] = []
-        var recents: [GistEntity] = []
+        var files: [GistFileEntity] = []
+        var recents: [GistFileEntity] = []
         let owned = Set(cache?.owned.map(\.id) ?? [])
         for gist in cache?.gists ?? [] {
             let filenames = gist.markdownFilenames
             let defaultFilename = gist.defaultMarkdownFilename
             let gistDrafts = drafts.filter { $0.gistID == gist.id && $0.filename.hasSuffix(".md") }
-            let files = filenames.map { filename in
+            let gistFiles = filenames.map { filename in
                 let draft = gistDrafts.first { $0.filename == filename }
                 // A draft is typing GitHub doesn't have yet, so it's newer.
                 return note(
@@ -54,12 +54,12 @@ extension LibrarySnapshot {
                     Gist.File.displayName(draft.filename), text: draft.text, updatedAt: draft.editedAt,
                     link: .gist(id: gist.id, filename: draft.filename), in: gist)
             }
-            gists += files
+            files += gistFiles
             // The widget shows the gist by its default file, as of the newest edit to any of its files.
             if owned.contains(gist.id), !gist.isDailyNote, !gist.isArchived,
-                var recent = files.first(where: { $0.link == .gist(id: gist.id, filename: defaultFilename) })
+                var recent = gistFiles.first(where: { $0.link == .gist(id: gist.id, filename: defaultFilename) })
             {
-                recent.updatedAt = files.map(\.updatedAt).max() ?? recent.updatedAt
+                recent.updatedAt = gistFiles.map(\.updatedAt).max() ?? recent.updatedAt
                 recents.append(recent)
             }
         }
@@ -68,14 +68,14 @@ extension LibrarySnapshot {
                 draft.newGistName ?? String(localized: "Untitled"), text: draft.text,
                 updatedAt: draft.editedAt,
                 link: .unpublishedGist(accountID: account.id, draftID: draft.id), in: nil)
-            gists.append(unpublished)
+            files.append(unpublished)
             if draft.newGistName != DailyNote.gistDescription { recents.append(unpublished) }
         }
-        self.gists = gists.sorted(by: Self.newestFirst)
+        self.files = files.sorted(by: Self.newestFirst)
         self.recents = Array(recents.sorted(by: Self.newestFirst).prefix(3))
     }
 
-    private static func newestFirst(_ a: GistEntity, _ b: GistEntity) -> Bool {
+    private static func newestFirst(_ a: GistFileEntity, _ b: GistFileEntity) -> Bool {
         a.updatedAt == b.updatedAt ? a.id < b.id : a.updatedAt > b.updatedAt
     }
 
@@ -83,11 +83,11 @@ extension LibrarySnapshot {
         let recents = [
             ("Thanksgiving menu", -1.5), ("Widget ideas", -3.0), ("Reading list", -26.0)
         ].enumerated().map { index, gist in
-            GistEntity(
+            GistFileEntity(
                 title: gist.0, tags: [], updatedAt: Date.now.addingTimeInterval(gist.1 * 3600),
                 link: .gist(id: "preview\(index)", filename: nil), accountID: nil)
         }
-        return Self(accountID: UUID(), accentHex: nil, gists: recents, recents: recents)
+        return Self(accountID: UUID(), accentHex: nil, files: recents, recents: recents)
     }
 
     static func excerpt(_ source: String?) -> String? {

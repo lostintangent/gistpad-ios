@@ -17,7 +17,7 @@ public struct CreateGistNoteIntent {
     public init() {}
 
     @MainActor
-    public func perform() async throws -> some IntentResult & ReturnsValue<GistEntity> {
+    public func perform() async throws -> some IntentResult & ReturnsValue<GistFileEntity> {
         guard attachments.isEmpty, !isPinned, folder == nil else {
             throw PlatformError.unsupportedNoteCreation
         }
@@ -33,13 +33,13 @@ public struct AppendToGistIntent {
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 
     public var content: AttributedString
-    public var target: GistEntity
+    public var target: GistFileEntity
     @Dependency var app: any PlatformActions
 
     public init() {}
 
     @MainActor
-    public func perform() async throws -> some IntentResult & ReturnsValue<GistEntity> {
+    public func perform() async throws -> some IntentResult & ReturnsValue<GistFileEntity> {
         let updated = try await app.appendToNote(target, text: String(content.characters))
         return .result(value: updated)
     }
@@ -50,7 +50,7 @@ public struct UpdateGistNoteIntent {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 
-    public var target: GistEntity
+    public var target: GistFileEntity
     public var name: AttributedString?
     public var attachments: [IntentFile]?
     public var isPinned: Bool?
@@ -60,7 +60,7 @@ public struct UpdateGistNoteIntent {
     public init() {}
 
     @MainActor
-    public func perform() async throws -> some IntentResult & ReturnsValue<GistEntity> {
+    public func perform() async throws -> some IntentResult & ReturnsValue<GistFileEntity> {
         guard attachments?.isEmpty != false,
               folder == nil || folder?.id == target.folder?.id
         else { throw PlatformError.unsupportedNoteUpdate }

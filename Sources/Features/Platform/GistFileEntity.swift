@@ -2,8 +2,10 @@ import AppIntents
 import Foundation
 
 @AppEntity(schema: .notes.note)
-public struct GistEntity: Codable {
-    public static let defaultQuery = GistEntityQuery()
+public struct GistFileEntity: Codable {
+    /// Its first name, which keeps saved Shortcuts and Spotlight items working.
+    public static let persistentIdentifier = "GistEntity"
+    public static let defaultQuery = GistFileQuery()
     public var id: String { link.url.absoluteString }
     var title: String
     var excerpt: String?
@@ -57,23 +59,23 @@ public struct GistEntity: Codable {
     }
 }
 
-public struct GistEntityQuery: EntityStringQuery {
+public struct GistFileQuery: EntityStringQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     @Dependency var app: any PlatformActions
     public init() {}
 
-    public func entities(for identifiers: [String]) async throws -> [GistEntity] {
+    public func entities(for identifiers: [String]) async throws -> [GistFileEntity] {
         try await app.noteEntities(for: identifiers)
     }
 
-    public func suggestedEntities() async throws -> [GistEntity] {
-        try await Array(LibrarySnapshot.read(validating: app)?.gists.prefix(12) ?? [])
+    public func suggestedEntities() async throws -> [GistFileEntity] {
+        try await Array(LibrarySnapshot.read(validating: app)?.files.prefix(12) ?? [])
     }
 
-    public func entities(matching string: String) async throws -> [GistEntity] {
+    public func entities(matching string: String) async throws -> [GistFileEntity] {
         let terms = string.split(whereSeparator: \.isWhitespace).map(String.init)
-        return try await LibrarySnapshot.read(validating: app)?.gists.filter { gist in
-            let content = ([gist.title] + gist.tags).joined(separator: " ")
+        return try await LibrarySnapshot.read(validating: app)?.files.filter { file in
+            let content = ([file.title] + file.tags).joined(separator: " ")
             return terms.allSatisfy { content.localizedStandardContains($0) }
         } ?? []
     }

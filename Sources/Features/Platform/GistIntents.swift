@@ -6,9 +6,9 @@ public struct OpenGistIntent: OpenIntent {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 
-    @Parameter(title: "Gist") public var target: GistEntity
+    @Parameter(title: "Gist") public var target: GistFileEntity
     public init() {}
-    public init(target: GistEntity) { self.target = target }
+    public init(target: GistFileEntity) { self.target = target }
 
     @MainActor
     public func perform() async throws -> some IntentResult {

@@ -31,7 +31,7 @@ public struct LauncherWidgetView: View {
     private var accent: Color {
         renderingMode == .fullColor ? Color(uiColor: .accentText) : .primary
     }
-    private var recents: [GistEntity] { snapshot?.recents ?? [] }
+    private var recents: [GistFileEntity] { snapshot?.recents ?? [] }
 
     public var body: some View {
         Group {
@@ -136,7 +136,7 @@ public struct LauncherWidgetView: View {
         }
     }
 
-    private func row(_ gist: GistEntity, lineLimit: Int, showsTime: Bool) -> some View {
+    private func row(_ gist: GistFileEntity, lineLimit: Int, showsTime: Bool) -> some View {
         Button(intent: OpenGistIntent(target: gist)) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: gist.title)

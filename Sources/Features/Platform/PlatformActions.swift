@@ -5,12 +5,12 @@ import Store
 @MainActor
 public protocol PlatformActions: AnyObject, Sendable {
     func validateAccount(_ accountID: UUID) async throws
-    func noteEntities(for identifiers: [String]) async throws -> [GistEntity]
-    func createNote(name: String, content: String?) async throws -> GistEntity
+    func noteEntities(for identifiers: [String]) async throws -> [GistFileEntity]
+    func createNote(name: String, content: String?) async throws -> GistFileEntity
     @discardableResult
     func addToToday(text: String, asTask: Bool, target: DailyNote.Day) async throws -> GistPadLink
-    func appendToNote(_ note: GistEntity, text: String) async throws -> GistEntity
-    func updateNote(_ note: GistEntity, name: String?, isPinned: Bool?) async throws -> GistEntity
+    func appendToNote(_ note: GistFileEntity, text: String) async throws -> GistFileEntity
+    func updateNote(_ note: GistFileEntity, name: String?, isPinned: Bool?) async throws -> GistFileEntity
 }
 
 public enum PlatformError: LocalizedError, Equatable, Sendable {

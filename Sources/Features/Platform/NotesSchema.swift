@@ -69,7 +69,7 @@ public struct GistFolderQuery: EntityStringQuery {
     }
 
     private func folders() async throws -> [GistFolderEntity] {
-        let notes = try await LibrarySnapshot.read(validating: app)?.gists ?? []
+        let notes = try await LibrarySnapshot.read(validating: app)?.files ?? []
         return Dictionary(
             notes.compactMap(\.folder).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }

@@ -46,7 +46,7 @@ struct LibrarySnapshotTests {
         ])
         #expect(snapshot.recents[1].updatedAt == typed.editedAt)
         #expect(snapshot.recents[1].tags == ["Work"])
-        #expect(snapshot.gists.count == 8)
+        #expect(snapshot.files.count == 8)
         #expect(snapshot.accentHex == "#0EA5E9")
     }
 
@@ -71,15 +71,15 @@ struct LibrarySnapshotTests {
                 (text as NSString).substring(from: Syntax.contentStart(in: text))
             })
 
-        #expect(snapshot.gists.count == 3)
+        #expect(snapshot.files.count == 3)
         #expect(snapshot.recents.map(\.title) == ["Manga reading list"])
-        let first = try #require(snapshot.gists.first {
+        let first = try #require(snapshot.files.first {
             $0.link == GistPadLink.gist(id: manga.id, filename: "README.md")
         })
-        let other = try #require(snapshot.gists.first {
+        let other = try #require(snapshot.files.first {
             $0.link == GistPadLink.gist(id: manga.id, filename: "Calendars.md")
         })
-        let newFile = try #require(snapshot.gists.first {
+        let newFile = try #require(snapshot.files.first {
             $0.link == GistPadLink.gist(id: manga.id, filename: "Next.md")
         })
         #expect(first.body == nil)
@@ -87,7 +87,7 @@ struct LibrarySnapshotTests {
         #expect(first.folderName == "Manga reading list")
         #expect(other.body == nil)
         #expect(newFile.body == nil)
-        #expect(snapshot.gists.allSatisfy { $0.content == nil })
+        #expect(snapshot.files.allSatisfy { $0.content == nil })
         let encoded = String(decoding: try JSONEncoder().encode(snapshot), as: UTF8.self)
         #expect(!encoded.contains("\"body\""))
         #expect(!encoded.contains("a distracting instruction"))
@@ -105,7 +105,7 @@ struct LibrarySnapshotTests {
             drafts: [])
 
         #expect(daily.defaultMarkdownFilename == "2026-02-01.md")
-        #expect(Set(snapshot.gists.map(\.link)) == [
+        #expect(Set(snapshot.files.map(\.link)) == [
             .gist(id: daily.id, filename: "2026-01-15.md"), .gist(id: daily.id, filename: "2026-02-01.md")
         ])
     }
@@ -135,7 +135,7 @@ struct LibrarySnapshotTests {
         ])
         #expect(snapshot.recents.map(\.updatedAt) == [sibling.editedAt, typed.editedAt, newer.updatedAt])
         // Each file keeps its own edit in Shortcuts and Spotlight.
-        #expect(snapshot.gists.first { $0.link == .gist(id: work.id, filename: "README.md") }?.updatedAt
+        #expect(snapshot.files.first { $0.link == .gist(id: work.id, filename: "README.md") }?.updatedAt
             == work.updatedAt)
     }
 

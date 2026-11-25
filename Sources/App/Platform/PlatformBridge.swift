@@ -104,18 +104,18 @@ final class PlatformBridge: PlatformActions {
         (source as NSString).substring(from: Syntax.contentStart(in: source))
     }
 
-    func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
+    func noteEntities(for identifiers: [String]) async throws -> [GistFileEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
         let snapshot = LibrarySnapshot(
             account: account, cache: model.gistCache, drafts: model.drafts,
             visibleText: Self.noteBody)
-        return snapshot.gists.filter { identifiers.contains($0.id) }.map {
+        return snapshot.files.filter { identifiers.contains($0.id) }.map {
             $0.withBody(visibleBody(for: $0, accountID: account.id))
         }
     }
 
     /// The live body of the note on screen, which RootView names as the editor's entity.
-    private func visibleBody(for note: GistEntity, accountID: UUID) -> String? {
+    private func visibleBody(for note: GistFileEntity, accountID: UUID) -> String? {
         guard let fileEditor = model.activeEditor,
             fileEditor.editor.entityIdentifier?.identifier == note.id,
             model.isForeground, model.state.selectedID != nil,
@@ -154,7 +154,7 @@ final class PlatformBridge: PlatformActions {
         }
     }
 
-    func createNote(name: String, content: String?) async throws -> GistEntity {
+    func createNote(name: String, content: String?) async throws -> GistFileEntity {
         try await serially {
             let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { throw PlatformError.emptyNoteName }
@@ -172,7 +172,7 @@ final class PlatformBridge: PlatformActions {
         }
     }
 
-    func appendToNote(_ note: GistEntity, text: String) async throws -> GistEntity {
+    func appendToNote(_ note: GistFileEntity, text: String) async throws -> GistFileEntity {
         try await serially {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw PlatformError.emptyNoteText
@@ -187,8 +187,8 @@ final class PlatformBridge: PlatformActions {
     }
 
     func updateNote(
-        _ note: GistEntity, name: String?, isPinned: Bool?
-    ) async throws -> GistEntity {
+        _ note: GistFileEntity, name: String?, isPinned: Bool?
+    ) async throws -> GistFileEntity {
         try await serially {
             let draft = try await self.noteDraft(for: note)
             let name = name?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -217,7 +217,7 @@ final class PlatformBridge: PlatformActions {
         }
     }
 
-    private func noteDraft(for note: GistEntity) async throws -> GistFileDraft {
+    private func noteDraft(for note: GistFileEntity) async throws -> GistFileDraft {
         guard let account = try await model.localAccount(), note.accountID == account.id else {
             throw PlatformError.accountChanged
         }

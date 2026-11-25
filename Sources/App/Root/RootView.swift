@@ -260,7 +260,7 @@ struct RootView: View {
 
     private func entityIdentifier(for fileEditor: GistFileEditor) -> EntityIdentifier? {
         onScreenNote(for: fileEditor).map {
-            EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
+            EntityIdentifier(for: GistFileEntity.self, identifier: $0.url.absoluteString)
         }
     }
 

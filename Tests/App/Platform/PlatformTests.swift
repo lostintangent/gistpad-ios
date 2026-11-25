@@ -84,7 +84,7 @@ struct PlatformTests {
         #expect(draft.text == "# Ranked\n1. Vagabond\n")
         let link = GistPadLink.unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
         #expect(PendingLink.shared.link == link)
-        let note = try #require(try LibrarySnapshot.read()?.gists.first { $0.link == link })
+        let note = try #require(try LibrarySnapshot.read()?.files.first { $0.link == link })
         #expect(note.content == nil)
         #expect(fixture.publishes.isEmpty)
         await fixture.model.open(.draft(id: draft.id))
@@ -95,7 +95,7 @@ struct PlatformTests {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }
         let fileEditor = try await fixture.fileEditor()
-        let note = try #require(try LibrarySnapshot.read()?.gists.first {
+        let note = try #require(try LibrarySnapshot.read()?.files.first {
             $0.link == GistPadLink.gist(id: "daily123", filename: DailyNote.Day().filename)
         })
         let original = fileEditor.editor.text
@@ -116,7 +116,7 @@ struct PlatformTests {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }
         let snapshot = try #require(try LibrarySnapshot.read())
-        let note = try #require(snapshot.gists.first {
+        let note = try #require(snapshot.files.first {
             $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
         })
         // Opening Today read the whole gist, so its sibling's excerpt is known, without front matter.
@@ -134,13 +134,13 @@ struct PlatformTests {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }
         let snapshot = try #require(try LibrarySnapshot.read())
-        let note = try #require(snapshot.gists.first {
+        let note = try #require(snapshot.files.first {
             $0.link == .gist(id: "daily123", filename: "another.md")
         })
         await fixture.model.open(.gist(id: "daily123", filename: "another.md"))
         let fileEditor = try #require(fixture.model.activeEditor)
         fixture.model.isForeground = true
-        fileEditor.editor.entityIdentifier = EntityIdentifier(for: GistEntity.self, identifier: note.id)
+        fileEditor.editor.entityIdentifier = EntityIdentifier(for: GistFileEntity.self, identifier: note.id)
         defer { fileEditor.editor.entityIdentifier = nil }
 
         let open = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
@@ -164,7 +164,7 @@ struct PlatformTests {
         defer { fixture.cleanUp() }
         await fixture.model.open(.today())
         let fileEditor = try #require(fixture.model.activeEditor)
-        let note = try #require(try LibrarySnapshot.read()?.gists.first {
+        let note = try #require(try LibrarySnapshot.read()?.files.first {
             $0.link == .gist(id: "daily123", filename: DailyNote.Day().filename)
         })
         let scene = try #require(
@@ -193,7 +193,7 @@ struct PlatformTests {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }
         let snapshot = try #require(try LibrarySnapshot.read())
-        let note = try #require(snapshot.gists.first {
+        let note = try #require(snapshot.files.first {
             $0.link == GistPadLink.gist(id: "manga", filename: "README.md")
         })
         let intent = UpdateGistNoteIntent()
