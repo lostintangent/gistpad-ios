@@ -34,7 +34,7 @@ public struct Failure: Error, Equatable, Sendable {
             self.init(AccountError.signedOut)
         case GitHubError.http(status: 404):
             self.init(error.localizedDescription)
-        case GitHubError.invalidResponse, GitHubError.http, DraftError.notConfirmed:
+        case GitHubError.invalidResponse, GitHubError.http, DraftError.notConfirmed, ImageError.http:
             self.init(error.localizedDescription, action: .tryAgain)
         case _ where !(error is any LocalizedError):
             self.init(String(localized: "GitHub couldn’t be reached."), action: .tryAgain)

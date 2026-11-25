@@ -8,6 +8,16 @@ public enum ImageError: Error, Equatable, Sendable {
     case http(status: Int)
 }
 
+extension ImageError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .unreadable: String(localized: "This item couldn’t be read as an image. Choose another one.")
+        case .tooLarge: String(localized: "Choose an image under 50 MB.")
+        case .http: String(localized: "GistPad’s image storage didn’t accept this image.")
+        }
+    }
+}
+
 /// Uploads an image the way gistpad.dev does: one POST to `assets/<gist>/<uuid>.<extension>`, then its public URL.
 public struct ImageStorage: Sendable {
     private let publishableKey: String

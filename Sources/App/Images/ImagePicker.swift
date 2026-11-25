@@ -1,4 +1,6 @@
 import PhotosUI
+import Screens
+import Store
 import SwiftUI
 
 extension View {
@@ -25,8 +27,8 @@ private struct ImagePicker: ViewModifier {
                 Task { await images.add(item) }
             }
             .alert("Couldn’t Add Image", item: $images.failure) { failure in
-                if let image = failure.image {
-                    Button("Try Again") { Task { await images.add(image: image) } }
+                if let action = failure.action {
+                    Button(action.title) { Task { await images.recover(from: failure) } }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { failure in

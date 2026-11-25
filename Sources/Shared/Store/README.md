@@ -62,9 +62,9 @@ invisible plus (U+2064) instead, and only this boundary knows it: decoding a
 compares text with GitHub's size. Its session has no URL cache or cookies and
 refuses redirects, and a body that doesn't decode is `.invalidResponse`.
 `Failure(error)` is the one place errors are sorted: a 401, a lapsed sign-in or
-Supabase refusing the session offers `.reconnect`, a request GitHub may take
-next time offers `.tryAgain`, and GistPad's own errors keep their sentence with
-no fix. Anything else, offline included, says GitHub couldn't be reached and
+Supabase refusing the session offers `.reconnect`, a request GitHub or image
+storage may take next time offers `.tryAgain`, and GistPad's own errors keep
+their sentence with no fix. Anything else, offline included, says GitHub couldn't be reached and
 offers `.tryAgain`, never the system's wording.
 
 ## Drafts

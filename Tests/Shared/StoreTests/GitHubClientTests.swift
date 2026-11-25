@@ -69,6 +69,7 @@ import Testing
         (AccountError.signedOut, Failure("GitHub needs you to sign in again.", action: .reconnect)),
         (AuthError.sessionMissing, Failure("GitHub needs you to sign in again.", action: .reconnect)),
         (GitHubError.http(status: 403), Failure("GitHub declined the request.", action: .tryAgain)),
+        (ImageError.http(status: 500), Failure("GistPad’s image storage didn’t accept this image.", action: .tryAgain)),
         (URLError(.timedOut), Failure("GitHub couldn’t be reached.", action: .tryAgain)),
         (GitHubError.http(status: 404), Failure("This gist is no longer available to this account.")),
         (DraftError.readOnly, Failure("Only its owner can edit this gist.")),

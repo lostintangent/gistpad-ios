@@ -9,14 +9,11 @@ import Store
 /// Adds an image the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
 @Observable
 final class ImageUpload {
-    struct Failure {
-        let message: String
-        let image: Data?
-    }
-
     var isShowingPicker = false
     var failure: Failure?
     private(set) var isUploading = false
+    /// The image the failure's fix adds again.
+    @ObservationIgnored private var failedImage: Data?
     /// The note the picked image, or a retried one, goes into.
     @ObservationIgnored private weak var fileEditor: GistFileEditor?
     private let model: GistPadModel
@@ -40,13 +37,13 @@ final class ImageUpload {
         isUploading = true
         defer { isUploading = false }
         do {
-            guard let image = try await item.loadTransferable(type: Data.self) else {
+            guard let image = try? await item.loadTransferable(type: Data.self) else {
                 throw ImageError.unreadable
             }
             try ImageStorage.check(image)
             await add(image: image)
         } catch {
-            failure = Failure(message: Self.message(for: error), image: nil)
+            failure = Failure(error)
         }
     }
 
@@ -56,7 +53,8 @@ final class ImageUpload {
         defer { isUploading = false }
         if fileEditor.file.gistID == nil { await fileEditor.publish() }
         guard fileEditor.file.gistID != nil else {
-            failure = Failure(message: String(localized: "You can add images after this gist publishes."), image: image)
+            failure = Failure(String(localized: "You can add images after this gist publishes."), action: .tryAgain)
+            failedImage = image
             return
         }
         do {
@@ -68,16 +66,15 @@ final class ImageUpload {
                     replacement: markdown),
                 generation: editor.generation)
         } catch {
-            failure = Failure(message: Self.message(for: error), image: image)
+            failure = Failure(error)
+            failedImage = image
         }
     }
 
-    private static func message(for error: any Error) -> String {
-        switch error {
-        case ImageError.tooLarge: String(localized: "Choose an image under 50 MB.")
-        case ImageError.http: String(localized: "GistPad’s image storage didn’t accept this image.")
-        case is ImageError: String(localized: "This item couldn’t be read as an image. Choose another one.")
-        default: Store.Failure(error).message
-        }
+    /// Signs in again first when that's the fix, then adds the image again.
+    func recover(from failure: Failure) async {
+        if failure.action == .reconnect { await model.reconnect() }
+        guard let failedImage else { return }
+        await add(image: failedImage)
     }
 }
