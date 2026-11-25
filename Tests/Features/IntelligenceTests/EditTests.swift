@@ -456,8 +456,12 @@ struct EditTests {
         #expect(
             try await revised("Intro\n- It's  \"here\"  \n", "Intro\n- It’s “here”\n- New")
                 == "Intro\n- It's  \"here\"  \n- New\n")
+        #expect(try await revised("Text", "Run ```make``` first") == "Run ```make``` first")
         await #expect(throws: IntelligenceError.unsafeEdit) {
             try await revised("Text\n", "Text\n\n```markdown\nMore")
+        }
+        await #expect(throws: IntelligenceError.unsafeEdit) {
+            try await revised("Text\n", "Text\n\n~~~\nMore")
         }
         await #expect(throws: IntelligenceError.unsafeEdit) {
             try await revised("Keep me", "\n\n")

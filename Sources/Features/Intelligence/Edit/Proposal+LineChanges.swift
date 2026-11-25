@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// The model's revised note, compared line by line with the part of the note it read. Each run of
 /// changed lines becomes one change, so the review shows exactly what the model changed.
@@ -29,7 +30,7 @@ extension Proposal.Change {
         // on-device model keeps a tight list tight.
         if !hasLooseList(old.map(\.text)) { new = tightened(new) }
         // An unclosed fence would turn the rest of the note into code.
-        guard !new.isEmpty, fences(in: new) % 2 == fences(in: old.map(\.text)) % 2 else {
+        guard !new.isEmpty, hasOpenFence(new) == hasOpenFence(old.map(\.text)) else {
             throw IntelligenceError.unsafeEdit
         }
         guard !old.isEmpty else {
@@ -111,7 +112,7 @@ extension Proposal.Change {
     }
 
     private static func isListItem(_ line: String) -> Bool {
-        line.contains(#/^\s*(?:[-*+]|\d+[.)])\s/#)
+        MarkdownDocument(line).isListItem(at: 0)
     }
 
     /// Whether the note separates any two list items with a blank line.
@@ -134,8 +135,9 @@ extension Proposal.Change {
         }
     }
 
-    private static func fences(in lines: [String]) -> Int {
-        lines.count { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
+    private static func hasOpenFence(_ lines: [String]) -> Bool {
+        // A leading line break keeps a first `---` line from reading as front matter.
+        MarkdownDocument("\n" + lines.joined(separator: "\n")).literals.contains { $0.kind == .code && !$0.isClosed }
     }
 
     /// The visible lines without their line breaks, leaving out trailing blank lines.
