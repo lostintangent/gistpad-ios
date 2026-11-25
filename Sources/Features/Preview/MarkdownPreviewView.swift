@@ -11,6 +11,7 @@ public struct MarkdownPreviewView: View {
     private let comments: CommentHighlightConfiguration
     private let commentActions: CommentHighlightActions?
     private let onEvent: @MainActor (PreviewEvent) -> Void
+    @State private var failed = false
 
     public init(
         markdown: String,
@@ -29,14 +30,23 @@ public struct MarkdownPreviewView: View {
     }
 
     public var body: some View {
-        NativeMarkdownPreview(
-            file: file, comments: comments, commentActions: commentActions, onEvent: onEvent
-        )
-        // The page scrolls under the bars, and UIKit insets it by their height.
-        .ignoresSafeArea(.container, edges: .vertical)
-        // Platform gap: WebKit's scroll anchoring loses the reading passage when SwiftUI animates the
-        // frame through several widths. Remove when an animated resize keeps the passage in place.
-        .transaction { $0.animation = nil }
+        if failed {
+            ContentUnavailableView {
+                Label(String(localized: "Preview Unavailable", bundle: .module), systemImage: "exclamationmark.circle")
+            } actions: {
+                Button(String(localized: "Try Again", bundle: .module)) { failed = false }
+            }
+        } else {
+            NativeMarkdownPreview(
+                file: file, comments: comments, commentActions: commentActions, onEvent: onEvent,
+                onFailure: { failed = true }
+            )
+            // The page scrolls under the bars, and UIKit insets it by their height.
+            .ignoresSafeArea(.container, edges: .vertical)
+            // Platform gap: WebKit's scroll anchoring loses the reading passage when SwiftUI animates the
+            // frame through several widths. Remove when an animated resize keeps the passage in place.
+            .transaction { $0.animation = nil }
+        }
     }
 }
 
@@ -47,6 +57,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     let comments: CommentHighlightConfiguration
     let commentActions: CommentHighlightActions?
     let onEvent: @MainActor (PreviewEvent) -> Void
+    let onFailure: @MainActor () -> Void
+    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
@@ -55,7 +67,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.isPaneVisible) private var isPaneVisible
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(file: file, onEvent: onEvent)
+        Coordinator(self)
     }
 
     func makeUIView(context: Context) -> PreviewWebView {
@@ -84,9 +96,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: PreviewWebView, context: Context) {
+        context.coordinator.parent = self
         webView.isHidden = !isPaneVisible
         webView.accessibilityElementsHidden = !isPaneVisible
-        context.coordinator.onEvent = onEvent
         let traits = webView.traitCollection.modifyingTraits {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
@@ -96,7 +108,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.commentHighlights.update(
             file: file, configuration: comments, actions: commentActions, accent: accent.color.hex)
-        context.coordinator.update(file)
+        context.coordinator.update()
     }
 
     static func dismantleUIView(_ uiView: PreviewWebView, coordinator: Coordinator) {
@@ -106,18 +118,16 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate {
+        fileprivate var parent: NativeMarkdownPreview
         fileprivate weak var webView: WKWebView?
-        fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
         fileprivate let commentHighlights = PreviewCommentHighlights()
-        private var file: PreviewFile
         private var lastSent: PreviewFile?
         private var lastAppearance: PreviewAppearance?
         private var ready = false
 
-        fileprivate init(file: PreviewFile, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
-            self.file = file
-            self.onEvent = onEvent
+        fileprivate init(_ parent: NativeMarkdownPreview) {
+            self.parent = parent
         }
 
         /// The completion-handler form submits calls in order, so a later render never races an earlier one.
@@ -129,7 +139,12 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
 
         private func fail(_ error: any Error) {
             let error = error as NSError
-            onEvent(.failure(error.userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription))
+            fail(error.userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription)
+        }
+
+        private func fail(_ reason: String) {
+            Logger.preview.error("The preview failed: \(reason)")
+            parent.onFailure()
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -142,16 +157,15 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             webView?.obscuredContentInsets = scrollView.adjustedContentInset
         }
 
-        fileprivate func update(_ file: PreviewFile) {
-            self.file = file
+        fileprivate func update() {
             guard ready else { return }
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
                 call("window.gistpadPreview.setAppearance(payload);", ["payload": appearance.arguments])
             }
-            guard lastSent != file else { return }
-            lastSent = file
-            call("window.gistpadPreview.render(payload);", ["payload": file.arguments])
+            guard lastSent != parent.file else { return }
+            lastSent = parent.file
+            call("window.gistpadPreview.render(payload);", ["payload": parent.file.arguments])
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -162,16 +176,20 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 return
             }
             do {
-                switch try PreviewMessage(message.body, file: file) {
+                switch try PreviewMessage(message.body, file: parent.file) {
                 case .ready:
                     ready = true
-                    update(file)
+                    update()
                 case .event(let event):
-                    onEvent(event)
+                    parent.onEvent(event)
+                case .openURL(let url):
+                    parent.openURL(url)
+                case .failure(let reason):
+                    fail(reason)
                 case .commentActivate(let segment, let start, let end):
                     try commentHighlights.activate(segment: segment, start: start, end: end)
                 case .rendered:
-                    commentHighlights.rendered(file)
+                    commentHighlights.rendered(parent.file)
                 case nil:
                     Logger.preview.debug("Dropped a preview message for an older generation.")
                 }

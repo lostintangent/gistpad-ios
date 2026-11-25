@@ -99,11 +99,8 @@ struct PreviewWebKitTests {
             "## Section \(section)\n\n"
                 + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
         }.joined(separator: "\n\n")
-        var events: [PreviewEvent] = []
         let controller = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) {
-                events.append($0)
-            })
+            rootView: MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) { _ in })
         let container = UIViewController()
         container.addChild(controller)
         container.view.addSubview(controller.view)
@@ -198,10 +195,6 @@ struct PreviewWebKitTests {
                 #expect(abs(pageHeight - (webView.bounds.height - inset.top - inset.bottom)) <= 1)
             }
         }
-        #expect(!events.contains {
-            if case .failure = $0 { return true }
-            return false
-        })
     }
 
     @Test("A pushed page paints its first frame below the bar", arguments: [false, true])
@@ -292,6 +285,28 @@ struct PreviewWebKitTests {
         await until(webView, \.isLoading) { $0 }
         await until(webView, \.isLoading) { !$0 }
         #expect(try await text(of: "h1", in: webView) == "Still here")
+    }
+
+    @Test("A page that fails gives way to Preview Unavailable")
+    func aFailedPageGivesWay() async throws {
+        let controller = UIHostingController(
+            rootView: MarkdownPreviewView(markdown: "# Failing", fileID: "failure-probe", generation: 1) { _ in })
+        let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { tearDown(window) }
+        controller.view.layoutIfNeeded()
+        let webView = try #require(findWebView(in: controller.view))
+        #expect(try await text(of: "h1", in: webView) == "Failing")
+
+        // A message the page posts arrives before the script that posted it returns.
+        _ = try await webView.callAsyncJavaScript(
+            """
+            window.webkit.messageHandlers.gistpadPreview.postMessage(
+                { type: "failure", fileID: "failure-probe", generation: 1, message: "Probe" });
+            """, arguments: [:], in: nil, contentWorld: .page)
+        controller.view.layoutIfNeeded()
+        #expect(findWebView(in: controller.view) == nil)
     }
 
     private func tearDown(_ window: UIWindow) {

@@ -26,6 +26,8 @@ enum PreviewMessage: Equatable {
     case ready
     case rendered
     case commentActivate(segment: Int, start: Int, end: Int)
+    case openURL(URL)
+    case failure(String)
     case event(PreviewEvent)
 
     private struct Envelope: Decodable {
@@ -80,7 +82,7 @@ enum PreviewMessage: Equatable {
                       scheme == "mailto" || url.host != nil else {
                     throw PreviewError.invalidMessage
                 }
-                self = .event(.openURL(url))
+                self = .openURL(url)
             default:
                 throw PreviewError.invalidMessage
             }
@@ -92,7 +94,7 @@ enum PreviewMessage: Equatable {
         case "rendered":
             self = .rendered
         case "failure":
-            self = .event(.failure(message.message ?? "The preview couldn’t be rendered."))
+            self = .failure(message.message ?? "")
         default:
             throw PreviewError.invalidMessage
         }

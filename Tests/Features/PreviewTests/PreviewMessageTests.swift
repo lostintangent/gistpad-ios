@@ -49,7 +49,7 @@ struct PreviewMessageTests {
             #expect(throws: PreviewError.self) { try PreviewMessage(link(target), file: file()) }
         }
         #expect(try PreviewMessage(link("https://example.com"), file: file())
-            == .event(.openURL(URL(string: "https://example.com")!)))
+            == .openURL(URL(string: "https://example.com")!))
     }
 
     @Test("A tapped highlight arrives as its segment and range")
