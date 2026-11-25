@@ -33,7 +33,7 @@ struct EditBlock {
             return Self(
                 id: index + 1, kind: block.kind, range: block.range,
                 text: value, heading: heading, level: block.level ?? 0,
-                marker: block.marker, taskMarker: block.taskMarker)
+                marker: block.prefix, taskMarker: block.box)
         }
     }
 

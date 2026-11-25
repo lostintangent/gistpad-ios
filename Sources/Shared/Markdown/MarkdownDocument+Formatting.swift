@@ -111,8 +111,8 @@ extension MarkdownDocument {
     /// Quotes the selected lines, or unquotes them when they're all quoted.
     public func edit(quoting selection: NSRange) -> MarkdownEdit? {
         togglingLines(selection) { line, _ in
-            let quote = Self.quoteMarker.firstMatch(in: text, options: .anchored, range: line.contents)
-            return (quote.map { NSMaxRange($0.range(at: 1)) }, "> ", quote != nil, nil)
+            let marker = quoteMarker(on: line)
+            return (marker.map(NSMaxRange), "> ", marker != nil, nil)
         }
     }
 

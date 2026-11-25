@@ -8,9 +8,11 @@ public struct MarkdownDocument: Sendable, Equatable {
     public let text: String
     /// Where the body starts, after closed front matter and the blank lines below it.
     public let contentStart: Int
-    let literals: [Literal]
-    /// Inline code can span lines, but never a blank one or a literal.
-    let proseRuns: [NSRange]
+    /// Front matter and fenced code, in order.
+    public let literals: [Literal]
+    /// The runs of nonblank lines outside literals, in order. Inline code can span lines, but
+    /// never a blank one or a literal.
+    public let proseRuns: [NSRange]
 
     public init(_ text: String) {
         // One bridged copy keeps every later UTF-16 read and regular expression fast.
@@ -43,25 +45,6 @@ public struct MarkdownDocument: Sendable, Equatable {
     /// The whole text, in UTF-16 like every range here.
     public var range: NSRange { NSRange(location: 0, length: source.length) }
 
-    /// Literals and inline code inside `range`, clipped to it, in order and merged.
-    public func protectedRanges(in range: NSRange) -> [NSRange] {
-        let ranges =
-            literals.map(\.range)
-            + proseRuns(touching: range).flatMap { inlineCode(in: $0) }
-        return ranges.compactMap { protected -> NSRange? in
-            let clipped = NSIntersectionRange(protected, range)
-            return clipped.length > 0 ? clipped : nil
-        }
-        .sorted { $0.location < $1.location }
-        .reduce(into: []) { merged, next in
-            if let last = merged.last, NSMaxRange(last) >= next.location {
-                merged[merged.count - 1] = NSUnionRange(last, next)
-            } else {
-                merged.append(next)
-            }
-        }
-    }
-
     var source: NSString { text as NSString }
 
     /// An edit that replaces `range` with `replacement`. A nil selection keeps the caret where it was.
@@ -93,30 +76,38 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 
     /// Front matter or a fenced code block, in whole lines with their terminators.
-    struct Literal: Sendable {
-        enum Kind: Sendable { case frontMatter, code }
+    public struct Literal: Sendable {
+        public enum Kind: Sendable { case frontMatter, code }
 
-        let kind: Kind
-        let range: NSRange
+        public let kind: Kind
+        public let range: NSRange
         /// A code block's opening and closing fence lines.
-        let fences: [NSRange]
-        let isClosed: Bool
+        public let fences: [NSRange]
+        public let isClosed: Bool
+    }
+
+    /// The literals `range` touches. An empty range touches the one it's in.
+    public func literals(touching range: NSRange) -> ArraySlice<Literal> {
+        Self.elements(of: literals, touching: range, at: \.range)
+    }
+
+    /// The prose runs `range` touches. An empty range touches the one it's in.
+    public func proseRuns(touching range: NSRange) -> ArraySlice<NSRange> {
+        Self.elements(of: proseRuns, touching: range, at: \.self)
     }
 
     /// Whether `range` touches a literal. A caret at the end of the note is inside a literal
     /// that hasn't closed yet, or one whose closing line has no terminator yet.
-    func isLiteral(_ range: NSRange) -> Bool {
+    public func isLiteral(_ range: NSRange) -> Bool {
         if range.length == 0, range.location == source.length {
             guard let last = literals.last, NSMaxRange(last.range) == source.length else { return false }
             return !last.isClosed || !source.line(at: source.length - 1).hasTerminator
         }
-        let end = max(NSMaxRange(range), range.location + 1)
-        let index = literals.partitioningIndex { NSMaxRange($0.range) > range.location }
-        return index < literals.endIndex && literals[index].range.location < end
+        return !literals(touching: range).isEmpty
     }
 
     /// Whether `range` touches a literal or inline code.
-    func isProtected(_ range: NSRange) -> Bool {
+    public func isProtected(_ range: NSRange) -> Bool {
         if isLiteral(range) { return true }
         let end = max(NSMaxRange(range), range.location + 1)
         return proseRuns(touching: range).contains { run in
@@ -124,16 +115,9 @@ public struct MarkdownDocument: Sendable, Equatable {
         }
     }
 
-    func proseRuns(touching range: NSRange) -> ArraySlice<NSRange> {
-        let end = max(NSMaxRange(range), range.location + 1)
-        let start = proseRuns.partitioningIndex { NSMaxRange($0) > range.location }
-        let stop = proseRuns[start...].partitioningIndex { $0.location >= end }
-        return proseRuns[start..<stop]
-    }
-
     /// Code spans in a prose run. A run of backticks closes at the next run of the same length,
     /// and a backslash before an opener is literal.
-    func inlineCode(in run: NSRange) -> [NSRange] {
+    public func inlineCode(in run: NSRange) -> [NSRange] {
         var ticks: [(range: NSRange, escaped: Bool)] = []
         var offset = run.location
         while offset < NSMaxRange(run) {
@@ -230,6 +214,16 @@ public struct MarkdownDocument: Sendable, Equatable {
                 isClosed: false)
         }
         return nil
+    }
+
+    /// The elements of `ordered`, whose ranges are in order and never overlap, that `range` touches.
+    private static func elements<Element>(
+        of ordered: [Element], touching range: NSRange, at element: (Element) -> NSRange
+    ) -> ArraySlice<Element> {
+        let end = max(NSMaxRange(range), range.location + 1)
+        let start = ordered.partitioningIndex { NSMaxRange(element($0)) > range.location }
+        let stop = ordered[start...].partitioningIndex { element($0).location >= end }
+        return ordered[start..<stop]
     }
 
     private static func proseRuns(in source: NSString, around literals: [Literal]) -> [NSRange] {

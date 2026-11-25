@@ -1,18 +1,24 @@
 # Markdown
 
 A note's Markdown, read once and changed through edits. The module uses only Foundation, so
-the editor, Preview, Intelligence, Platform and Store share one reading of the same text.
+the editor, Preview, Intelligence, Platform and Store share one reading of the same text. It's
+the note's state, not its look: highlighting and Writing Tools' protected ranges are the
+editor's, in Editor.
 
 ```text
 MarkdownDocument                  a note's source, read once
   text  contentStart  body        the source, where the body starts, and the body
   range                           the whole text
-  spans  spans(in:)               the constructs to highlight, for the note or some lines
-  spanRange(for:from:)            the lines whose spans an edit can change
-  blocks                          headings, paragraphs, list items, table rows and code
+  literals  literals(touching:)   front matter and fenced code, in whole lines
+  proseRuns  proseRuns(touching:) the runs of nonblank lines outside them
+  inlineCode(in:)                 a prose run's code spans
+  isLiteral(_:)  isProtected(_:)  whether a range touches a literal, or inline code too
+  blocks  blocks(in:)             headings, paragraphs, list items, table rows and code
+  listItem(at:) -> ListItem       the list item on a line: prefix, marker, number and box
+  quoteMarker(at:)                the marker that quotes a line
+  headingMarker(at:)              the marker that makes a line a heading
   excerpt                         the prose on one line, for a snippet
   taskMarkers                     every task box
-  protectedRanges(in:)            front matter, fenced and inline code
   edit(…) -> MarkdownEdit         every change, made from this document
 
 MarkdownEdit                      one change to that document

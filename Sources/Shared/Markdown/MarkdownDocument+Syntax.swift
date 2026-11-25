@@ -1,17 +1,6 @@
 import Foundation
 
 extension MarkdownDocument {
-    /// A run of source that reads as one Markdown construct, for styling.
-    public struct Span: Sendable, Equatable {
-        public enum Kind: Sendable {
-            case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
-            case code, frontMatter, link, task, checkedTask, punctuation, linkDestination
-        }
-
-        public let range: NSRange
-        public let kind: Kind
-    }
-
     /// One structural block of the note, outside front matter.
     public struct Block: Sendable, Equatable {
         public enum Kind: String, Sendable {
@@ -22,38 +11,41 @@ extension MarkdownDocument {
         /// Whole lines, without the last one's line break.
         public let range: NSRange
         public let level: Int?
-        /// A list item's indent, marker, spacing and box.
-        public let marker: NSRange?
-        public let taskMarker: NSRange?
+        /// Everything before a list item's text: its indent, marker, spacing and box.
+        public let prefix: NSRange?
+        /// A task's box.
+        public let box: NSRange?
 
-        init(
-            _ kind: Kind, range: NSRange, level: Int? = nil, marker: NSRange? = nil,
-            taskMarker: NSRange? = nil
-        ) {
+        init(_ kind: Kind, range: NSRange, level: Int? = nil, prefix: NSRange? = nil, box: NSRange? = nil) {
             self.kind = kind
             self.range = range
             self.level = level
-            self.marker = marker
-            self.taskMarker = taskMarker
+            self.prefix = prefix
+            self.box = box
         }
     }
 
     /// A list item's line, quoted or not.
-    struct ListItem {
+    public struct ListItem: Sendable {
         let line: Line
         /// Everything before the item's text: indent, quote, marker, spacing and box.
-        let prefix: NSRange
+        public let prefix: NSRange
+        /// The bullet, or the number with its `.` or `)`.
+        public let marker: NSRange
+        public let number: Int?
+        public let box: NSRange?
+        public let isChecked: Bool
+        public let isQuoted: Bool
         let indent: String
-        let isQuoted: Bool
         let bullet: String?
         let digits: NSRange?
-        let number: Int?
         /// `.` or `)` for a numbered item, and empty for a bullet.
         let delimiter: String
         let spacing: String
-        let box: NSRange?
         let boxSpacing: String
-        let isChecked: Bool
+
+        /// The line, without its line break.
+        public var range: NSRange { line.contents }
 
         init(_ match: NSTextCheckingResult, on line: Line, in source: NSString) {
             func group(_ index: Int) -> NSRange? {
@@ -69,6 +61,7 @@ extension MarkdownDocument {
             digits = group(4)
             number = digits.flatMap { Int(source.substring(with: $0)) }
             delimiter = text(5)
+            marker = group(3) ?? NSUnionRange(match.range(at: 4), match.range(at: 5))
             spacing = text(6)
             box = group(7)
             boxSpacing = text(8)
@@ -76,83 +69,16 @@ extension MarkdownDocument {
         }
     }
 
-    /// Every span in the note.
-    public var spans: [Span] { spans(in: range) }
-
-    /// The spans of the whole lines in `range`, with every literal and prose run it touches whole.
-    /// Later spans override earlier ones.
-    public func spans(in range: NSRange) -> [Span] {
-        var spans: [Span] = []
-        func add(_ range: NSRange, _ kind: Span.Kind) {
-            if range.location != NSNotFound, range.length > 0 { spans.append(Span(range: range, kind: kind)) }
-        }
-        // Every match stays on one line, so one that starts outside a literal is prose.
-        func prose(_ expression: NSRegularExpression) -> [NSTextCheckingResult] {
-            expression.matches(in: text, range: range).filter {
-                !isLiteral(NSRange(location: $0.range.location, length: 0))
-            }
-        }
-        for match in prose(Self.quoteMarker) { add(match.range, .blockquote) }
-        for match in prose(Self.headingMarker) { add(match.range, .heading) }
-        for (expression, groups) in Self.inlineStyles {
-            for match in prose(expression) {
-                for (group, kind) in groups { add(match.range(at: group), kind) }
-            }
-        }
-        for match in prose(Self.listMarker) {
-            let item = ListItem(match, on: source.line(at: match.range.location), in: source)
-            if let box = item.box { add(box, item.isChecked ? .checkedTask : .task) }
-            if let digits = item.digits {
-                add(NSRange(location: digits.location, length: digits.length + 1), .orderedMarker)
-            }
-            if item.bullet != nil { add(match.range(at: 3), .punctuation) }
-        }
-        for literal in literals where NSIntersectionRange(literal.range, range).length > 0 {
-            add(literal.range, literal.kind == .code ? .code : .frontMatter)
-            // A fence is markup, so it's highlighted like other line-leading markers.
-            for fence in literal.fences { add(fence, .punctuation) }
-        }
-        for run in proseRuns(touching: range) {
-            for code in inlineCode(in: run) { add(code, .code) }
-        }
-        return spans
-    }
-
-    /// The whole lines whose spans can differ once `old` became this document by a change to
-    /// `edited`, a range of this text, so `spans(in:)` over them and `old`'s spans elsewhere make
-    /// `spans`. That's every prose run and literal the change touches in either document, grown
-    /// until it splits none. Past it the text is the same and no literal is open, so it parses the
-    /// same way.
-    public func spanRange(for edited: NSRange, from old: MarkdownDocument) -> NSRange {
-        let delta = source.length - old.source.length
-        var range = edited
-        while true {
-            let grown = old.runRange(around: NSRange(location: range.location, length: range.length - delta))
-            let next = NSUnionRange(
-                runRange(around: range), NSRange(location: grown.location, length: grown.length + delta))
-            if next == range { return range }
-            range = next
-        }
-    }
-
-    /// The whole lines of `range`, grown to every prose run and literal they touch.
-    private func runRange(around range: NSRange) -> NSRange {
-        let lines = source.lineRange(for: range)
-        return (proseRuns(touching: lines) + literals.map(\.range).filter { touches($0, lines) })
-            .reduce(lines, NSUnionRange)
-    }
-
-    private func touches(_ literal: NSRange, _ range: NSRange) -> Bool {
-        literal.location < max(NSMaxRange(range), range.location + 1) && NSMaxRange(literal) > range.location
-    }
-
     /// The note's blocks in order. Each fenced code block is one block, and front matter is none.
-    public var blocks: [Block] {
-        var blocks = literals.filter { $0.kind == .code }.map { literal in
+    public var blocks: [Block] { blocks(in: range) }
+
+    /// The blocks of every prose run and code block `range` touches, in order.
+    public func blocks(in range: NSRange) -> [Block] {
+        var blocks = literals(touching: range).filter { $0.kind == .code }.map { literal in
             let end = source.line(at: NSMaxRange(literal.range) - 1).contentsEnd
             return Block(.code, range: NSRange(literal.range.location..<end))
         }
-        for run in proseRuns {
+        for run in proseRuns(touching: range) {
             var current: Block?
             func finish(_ next: Block? = nil) {
                 if let current { blocks.append(current) }
@@ -164,7 +90,7 @@ extension MarkdownDocument {
                     finish(Block(.heading, range: contents, level: heading.range(at: 2).length))
                     finish()
                 } else if let item = listItem(on: line) {
-                    finish(Block(.listItem, range: contents, marker: item.prefix, taskMarker: item.box))
+                    finish(Block(.listItem, range: contents, prefix: item.prefix, box: item.box))
                 } else if source.substring(with: contents).trimmingCharacters(in: .whitespaces).hasPrefix("|") {
                     finish(Block(.tableRow, range: contents))
                 } else if let block = current,
@@ -173,7 +99,7 @@ extension MarkdownDocument {
                 {
                     current = Block(
                         block.kind, range: NSUnionRange(block.range, contents), level: block.level,
-                        marker: block.marker, taskMarker: block.taskMarker)
+                        prefix: block.prefix, box: block.box)
                 } else {
                     finish(Block(.paragraph, range: contents))
                 }
@@ -189,8 +115,8 @@ extension MarkdownDocument {
         let prose = blocks.compactMap { block -> NSRange? in
             switch block.kind {
             case .paragraph: block.range
-            case .listItem where block.taskMarker == nil:
-                block.marker.map { NSRange(NSMaxRange($0)..<NSMaxRange(block.range)) }
+            case .listItem where block.box == nil:
+                block.prefix.map { NSRange(NSMaxRange($0)..<NSMaxRange(block.range)) }
             default: nil
             }
         }
@@ -215,8 +141,9 @@ extension MarkdownDocument {
         }
     }
 
-    /// The list item on `location`'s line. Typing and the keyboard bar leave quoted items alone.
-    func listItem(at location: Int, includingQuoted: Bool = false) -> ListItem? {
+    /// The list item on `location`'s line, whatever its context. Typing and the keyboard bar
+    /// leave quoted items alone.
+    public func listItem(at location: Int, includingQuoted: Bool = false) -> ListItem? {
         listItem(on: source.line(at: location), includingQuoted: includingQuoted)
     }
 
@@ -227,11 +154,26 @@ extension MarkdownDocument {
         return includingQuoted || !item.isQuoted ? item : nil
     }
 
+    /// The `>` and the space after it that quote `location`'s line, whatever its context.
+    public func quoteMarker(at location: Int) -> NSRange? {
+        quoteMarker(on: source.line(at: location))
+    }
+
+    /// The hashes and the space after them that make `location`'s line a heading, whatever its context.
+    public func headingMarker(at location: Int) -> NSRange? {
+        Self.headingMarker.firstMatch(in: text, options: .anchored, range: source.line(at: location).contents)?
+            .range
+    }
+
+    func quoteMarker(on line: Line) -> NSRange? {
+        Self.quoteMarker.firstMatch(in: text, options: .anchored, range: line.contents)?.range
+    }
+
     // One grammar per construct. Each matches within a line.
 
-    static let quoteMarker = expression(#"^( {0,3}>[ \t]?).*"#)
+    static let quoteMarker = expression(#"^ {0,3}>[ \t]?"#)
     /// Group 2 is the heading's level in hashes.
-    static let headingMarker = expression(#"^( {0,3}(#{1,6})(?:[ \t]+|$)).*"#)
+    static let headingMarker = expression(#"^( {0,3}(#{1,6})(?:[ \t]+|$))"#)
     static let headingClosing = expression(#"[ \t]+#+[ \t]*$"#)
     /// Indent, quote, bullet, digits, delimiter, spacing, box and the box's spacing.
     static let listMarker = expression(
@@ -240,26 +182,6 @@ extension MarkdownDocument {
     static let fenceOpener = expression(
         #"^[ \t]*(?:>[ \t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$"#)
     static let fenceCloser = expression(#"^[ \t]*(?:>[ \t]*)*(`{3,}|~{3,})[ \t]*$"#)
-
-    private static let inlineStyles: [(NSRegularExpression, [(Int, Span.Kind)])] = [
-        (expression(#"(?<!\\)(\*{3})(?=\S)(.+?\S|\S)\1"#), [(0, .strong), (0, .emphasis)]),
-        (
-            expression(#"(?<![\\_\p{L}\p{N}])(_{3})(?=\S)(.+?\S|\S)\1(?![_\p{L}\p{N}])"#),
-            [(0, .strong), (0, .emphasis)]
-        ),
-        (expression(#"(?<!\\)(\*\*)(?=\S)(.+?\S|\S)\1"#), [(0, .strong)]),
-        (expression(#"(?<![\\_\p{L}\p{N}])(__)(?=\S)(.+?\S|\S)\1(?![_\p{L}\p{N}])"#), [(0, .strong)]),
-        (
-            expression(
-                #"(?<![\\*])\*(?!\*)(?=\S)(.+?\S|\S)(?<!\*)\*(?!\*)|(?<![\\_\p{L}\p{N}])_(?!_)(?=\S)(.+?\S|\S)(?<!_)_(?![_\p{L}\p{N}])"#
-            ),
-            [(0, .emphasis)]
-        ),
-        (expression(#"(?<!\\)(~~)(?=\S)(.+?\S|\S)\1"#), [(0, .strikethrough)]),
-        (expression(#"(?<!\\)</?[A-Za-z][A-Za-z0-9-]*(?:[ \t]+[^<>\r\n]*?)?[ \t]*/?>"#), [(0, .htmlTag)]),
-        (expression(#"(!?\[)([^\]\r\n]+)(\]\()([^\)\r\n]+)(\))"#), [(0, .link), (4, .linkDestination)]),
-        (expression(#"(\[\[)([^\]\r\n]+)(\]\])"#), [(0, .link)]),
-    ]
 
     private static func expression(_ pattern: String) -> NSRegularExpression {
         try! NSRegularExpression(pattern: pattern, options: .anchorsMatchLines)
