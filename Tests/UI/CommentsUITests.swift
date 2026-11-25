@@ -82,6 +82,23 @@ final class CommentsUITests: XCTestCase {
         try waitUntil("the selected thread") { thread.exists && thread.isSelected }
     }
 
+    func testShowInFileBringsThePassageIntoView() throws {
+        let app = launchGistPad(open: "comments", mode: "preview", sheet: "comments")
+        try waitUntil("Comments over the Preview", timeout: firstRender) {
+            app.webViews.firstMatch.exists && app.element("comment-thread-1").exists
+        }
+        let show = app.element("comment-passage-4")
+        for _ in 0..<6 where !show.isTappable { app.element("comments-conversation").swipeUp() }
+        try tap(show, "Show in File")
+
+        // A sheet over the note closes, and an inspector beside it stays.
+        let inspector = app.element("comments-inspector")
+        try waitUntil("Comments closed only over the note") { inspector.exists == app.isRegularWidth }
+        // The passage ends the note, out of view until it's revealed.
+        let passage = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'The margins of a notebook'")).firstMatch
+        try waitUntil("the passage in view") { passage.isTappable }
+    }
+
     /// Swipes through the conversation until `thread` is on screen. Folded, the sheet fits two
     /// threads, and only threads on screen are in the accessibility tree.
     private func scroll(to thread: String, in app: XCUIApplication) throws {

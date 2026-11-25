@@ -20,6 +20,8 @@ struct CommentsInspector: View {
             }
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
+            // The title stays as the conversation scrolls, so a revealed thread rests under it.
+            .toolbarMinimizationBehavior(.never, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { comments.hide() }
@@ -51,6 +53,12 @@ extension View {
         modifier(CommentsInspectorHost(
             comments: comments, active: active, columnVisibility: columnVisibility))
     }
+}
+
+extension EnvironmentValues {
+    /// Whether Comments is a sheet over the file rather than an inspector beside it, as the host's size
+    /// class decides.
+    @Entry var isCommentsSheet = false
 }
 
 private struct CommentsInspectorHost: ViewModifier {
@@ -125,6 +133,7 @@ private struct CommentsInspectorHost: ViewModifier {
 
     private var panel: some View {
         CommentsInspector(comments: comments)
+            .environment(\.isCommentsSheet, horizontalSizeClass == .compact)
             .onChange(of: dynamicTypeSize, initial: true) { _, size in
                 if size.isAccessibilitySize { comments.detent = .large }
             }

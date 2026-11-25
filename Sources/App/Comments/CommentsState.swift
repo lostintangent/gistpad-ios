@@ -178,12 +178,17 @@ final class CommentsState {
         isComposerFocused = true
     }
 
-    /// Shows a thread's passage in the file, out from under the keyboard and a full-height sheet.
-    func revealPassage(_ id: Int64) {
+    /// Shows a thread's passage in the file, out from under the keyboard. A sheet over the file closes,
+    /// so the passage lands in full view and the file stays there instead of returning to the caret.
+    func revealPassage(_ id: Int64, closingSheet: Bool) {
         selectedThreadID = id
         isComposerFocused = false
-        detent = .medium
         reveal(id)
+        guard closingSheet else { return }
+        returnsToEditing = false
+        // The selection marks the passage until the sheet is gone, so Preview reveals it even with
+        // inline comments off.
+        isPresented = false
     }
 
     /// Shows the file in another mode, with the selected thread's passage in view.

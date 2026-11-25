@@ -134,6 +134,7 @@ private struct CommentThreadContent: View {
     @State private var showsFullQuote = false
     @State private var quoteIsLong = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isCommentsSheet) private var isCommentsSheet
     @ScaledMetric(relativeTo: .body) private var contentSpacing = 8
     @ScaledMetric(relativeTo: .body) private var quoteSpacing = 12
     @ScaledMetric(relativeTo: .body) private var avatarSize = 28
@@ -277,7 +278,7 @@ private struct CommentThreadContent: View {
                         }
                     if comments.matchedThreadIDs?.contains(comment.id) == true {
                         Button {
-                            comments.revealPassage(comment.id)
+                            comments.revealPassage(comment.id, closingSheet: isCommentsSheet)
                         } label: {
                             Label("Show in File", systemImage: "text.viewfinder")
                                 .labelStyle(.iconOnly)
