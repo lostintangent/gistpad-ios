@@ -28,7 +28,7 @@ let proposal = try await OnDeviceModel().edit(request)
 
 | Type | What it is |
 |---|---|
-| `Answer`, `Answer.Citation` | The prose, and each passage it cites at the ranges where the note has it. |
+| `Answer`, `Answer.Citation` | The prose, and each passage it cites at the ranges where the note has it, with the passage as Preview reads it. |
 | `Answer.Reply` | The model's prose and quotes before they're checked. `Answer(reply, in:)` finds every quote or throws. |
 | `Answer.Issue` | Why a reply's prose can't be shown, such as a quote the note doesn't have or leftover Markdown. |
 

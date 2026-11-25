@@ -36,3 +36,55 @@ extension Answer {
         }
     }
 }
+
+extension Answer.Citation {
+    /// The passage as Preview reads it, a line for each block. Headings, list items, quotes, tables
+    /// and fences lose their Markdown, inline styles become attributes, and a paragraph's lines flow
+    /// together. A table row's cells are separated by tabs, like a table copied from Notes.
+    package var passage: AttributedString {
+        let document = MarkdownDocument(text)
+        let source = document.text as NSString
+        /// The lines `range` touches from its start, each without the `>` that quotes it.
+        func lines(in range: NSRange) -> [String] {
+            var lines: [String] = []
+            source.enumerateSubstrings(in: range, options: .byLines) { _, line, _, _ in
+                let start = max(line.location, document.quoteMarker(at: line.location).map(NSMaxRange) ?? 0)
+                lines.append(source.substring(with: NSRange(start..<NSMaxRange(line))))
+            }
+            return lines
+        }
+        func inline(_ markdown: String) -> AttributedString {
+            let options = AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            return (try? AttributedString(markdown: markdown, options: options)) ?? AttributedString(markdown)
+        }
+        let blocks = document.blocks.compactMap { block -> AttributedString? in
+            switch block.kind {
+            case .heading:
+                return block.title.map { inline(source.substring(with: $0)) }
+            case .paragraph, .listItem:
+                let start = block.prefix.map(NSMaxRange) ?? block.range.location
+                return inline(
+                    lines(in: NSRange(start..<NSMaxRange(block.range)))
+                        .map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " "))
+            case .tableRow:
+                let cells = source.substring(with: block.range).split(separator: "|")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                guard !cells.allSatisfy({ $0.wholeMatch(of: /:?-+:?/) != nil }) else { return nil }
+                return inline(cells.joined(separator: "\t"))
+            case .code:
+                var code = lines(in: block.range).dropFirst()
+                if code.last?.trimmingCharacters(in: .whitespaces).wholeMatch(of: /`{3,}|~{3,}/) != nil {
+                    code.removeLast()
+                }
+                var passage = AttributedString(code.joined(separator: "\n"))
+                passage.inlinePresentationIntent = .code
+                return passage
+            }
+        }
+        return blocks.reduce(into: AttributedString()) { passage, block in
+            if !passage.characters.isEmpty { passage.append(AttributedString("\n")) }
+            passage.append(block)
+        }
+    }
+}

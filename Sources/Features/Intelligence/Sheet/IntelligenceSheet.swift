@@ -156,7 +156,7 @@
                 }
                 ForEach(answer.citations.enumerated(), id: \.offset) { _, citation in
                     Section {
-                        Text(citation.text).textSelection(.enabled)
+                        Text(citation.passage).lineLimit(3).textSelection(.enabled)
                         if citation.ranges.count == 1, let range = citation.ranges.first {
                             Button(
                                 String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"

@@ -118,7 +118,7 @@
                 document = editor.document
                 errorMessage = nil
                 notice = String(
-                    localized: "Applied. The editor’s Undo restores your text.", bundle: .module)
+                    localized: "Applied. Undo restores your text.", bundle: .module)
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -29,6 +29,20 @@ struct AskTests {
         #expect(fixture.passes.map(\.requestID) == [short.id])
     }
 
+    @Test(arguments: [
+        ("# Thanksgiving menu\n\nTwelve at the table this year,\nand dinner's at **4**.",
+         "Thanksgiving menu\nTwelve at the table this year, and dinner's at 4."),
+        ("| Dish | Who |\n| --- | :---: |\n| Turkey and gravy | Me |", "Dish\tWho\nTurkey and gravy\tMe"),
+        ("> The turkey goes in at 10:30,\n> so the oven's free", "The turkey goes in at 10:30, so the oven's free"),
+        ("- [ ] Brine the turkey\n2. Borrow Mom's [gravy boat](https://example.com)",
+         "Brine the turkey\nBorrow Mom's gravy boat"),
+        ("```swift\nlet *x* = 1\n```", "let *x* = 1"),
+    ])
+    func aCitationReadsLikePreview(quote: String, passage: String) {
+        let citation = Answer.Citation(text: quote, ranges: [])
+        #expect(String(citation.passage.characters) == passage)
+    }
+
     @Test func aCitationCarriesTheExactPassageForShowInFile() async throws {
         let fixture = FixtureLanguageModel()
         fixture.answer = Answer.Reply(prose: "", quotes: ["👩🏽‍💻"])
